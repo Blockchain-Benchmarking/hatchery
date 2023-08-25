@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift    # Path of the file where to print the image id
+region="$1" ; shift    # AWS region where to look for the image id
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${secgroup}" != 'x'  # Security group to find the secgroup id for
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+if [ "${secgroup:0:3}" = 'sg-' ] ; then
+    echo "${secgroup}"
+else
+    aws ec2 describe-security-groups \
+      --region="${region}" \
+      --group-names="${secgroup}" \
+      --query='SecurityGroups[*].GroupId' \
+      --output='text'
+fi > "${workdir}/out"
+
+
+test -s "${workdir}/out"
+
+out="$(cat "${workdir}/out")"
+echo "secgroup_id='${out}'" > "${output}"

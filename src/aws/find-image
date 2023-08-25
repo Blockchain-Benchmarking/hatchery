@@ -1,0 +1,163 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift    # Path of the file where to print the image id
+region="$1" ; shift    # AWS region where to look for the image id
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${images}" != 'x'  # Image names or image ids to find the image id for
+test "x${types}" != 'x'   # AWS instance types the image must run on
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+# Get the ISA for every type.
+#
+
+for vmtype in "${types[@]}" ; do
+    query='InstanceTypes[0].ProcessorInfo.SupportedArchitectures[0]'
+
+    printf "%s " "${vmtype}"
+
+    aws ec2 describe-instance-types \
+      --region="${region}" \
+      --instance-types="${vmtype}" \
+      --query="${query}" \
+      --output='text' \
+    || echo 'none'
+done > "${workdir}/types" 2>> "${workdir}/err" &
+
+
+# Get all images specifications that match the names in the `images` array.
+# Store them associated with the position they have in the array so we remember
+# which ones have the priority.
+#
+
+mkdir "${workdir}/img"
+
+priority=0
+
+for image in "${images[@]}" ; do
+    query='Images[*].[ImageId'
+    query="${query}, ImageOwnerAlias"
+    query="${query}, Architecture"
+    query="${query}, CreationDate"
+    query="${query}, Public"
+    query="${query}, BlockDeviceMappings[].Ebs.VolumeSize | [0]]"
+
+    if [ "x${image:0:4}" = 'xami-' ] ; then
+	aws ec2 describe-images \
+          --region="${region}" \
+	  --image-ids="${image}" \
+	  --query="${query}" \
+	  --output='text'
+    else
+	aws ec2 describe-images \
+          --region="${region}" \
+	  --filters "Name=name,Values=\"${image}\"" \
+	  --query="${query}" \
+	  --output='text'
+    fi | sed -r 's/[[:space:]]+/ /g' \
+       | sort | uniq > "${workdir}/img/${priority}" &
+
+    priority=$(( priority + 1 ))
+done
+
+
+wait
+
+
+# Try to pair each ISA with its preferred image id.
+# Try image id in the order of priority they appear in `images`.
+# Within a same priority level, prefer
+#   private images
+#   images coming from AWS (instead of marketplace)
+#   most recent
+#   smallest disk size
+#   smallest id (in lexicographic order
+#
+
+grep -v 'none' "${workdir}/types" > "${workdir}/tmp" || true
+if [ -s "${workdir}/tmp" ] ; then
+    mv "${workdir}/tmp" "${workdir}/types"
+else
+    cat "${workdir}/err" >&2
+    exit 1
+fi
+
+cut -d' ' -f2 "${workdir}/types" | sort | uniq > "${workdir}/isa"
+
+mkdir "${workdir}/id"
+
+while read isa ; do
+    for priority in $(ls -1 "${workdir}/img" | sort -g) ; do
+	cp "${workdir}/img/${priority}" "${workdir}/tmp"
+
+	regex="^(\S+ ){2}${isa}"                     # Filtering compatible ISA
+	if grep -P "${regex}" "${workdir}/tmp" > "${workdir}/tmp2" ; then
+	    mv "${workdir}/tmp2" "${workdir}/tmp"
+	else
+	    continue
+	fi
+
+	regex='^(\S+ ){4}False'                    # Looking for private images
+	if grep -Pq "${regex}" "${workdir}/tmp" ; then
+	    grep -P "${regex}" "${workdir}/tmp" > "${workdir}/tmp2"
+	    mv "${workdir}/tmp2" "${workdir}/tmp"
+	fi
+
+	regex='^(\S+ )amazon'                     # Looking for images from AWS
+	if grep -Pq "${regex}" "${workdir}/tmp" ; then
+	    grep -P "${regex}" "${workdir}/tmp" > "${workdir}/tmp2"
+	    mv "${workdir}/tmp2" "${workdir}/tmp"
+	fi
+
+	# If still many candidate, we need to pick only one.
+	# Pick most recent (k=3) smallest (k=5) and lexicographic (k=1) in this
+	# order.
+	#
+	sort -k1 "${workdir}/tmp" | sort -k6 --stable | sort -k4 --stable \
+	| tail -n1 | cut -d' ' -f1 > "${workdir}/img/${isa}"
+
+	break
+    done
+done < "${workdir}/isa"
+
+
+# Print the best image id for each type.
+# If no image could be found for all types, exit with failure.
+#
+
+count=0
+while read vmtype isa ; do
+    if [ ! -e "${workdir}/img/${isa}" ] ; then
+	continue
+    fi
+
+    img="$(cat "${workdir}/img/${isa}")"
+
+    if [ "x${img}" != 'x' ] ; then
+	echo "${vmtype} ${img}"
+	count=$(( count + 1 ))
+    fi
+done < "${workdir}/types" > "${workdir}/out"
+
+if [ ${count} -eq 0 ] ; then
+    cat "${workdir}/err" >&2
+    exit 1
+fi
+
+(
+    echo "type_image_ids=("
+
+    while read vmtype img ; do
+	echo "  '${vmtype} ${img}'"
+    done < "${workdir}/out"
+
+    echo ")"
+) > "${output}"

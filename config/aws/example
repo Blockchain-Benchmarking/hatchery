@@ -1,0 +1,7 @@
+# This is an AWS machine profile example.
+#
+
+types=('t4g.nano' 't3.nano' 't2.nano')
+images=('ubuntu/images/*22.04*')
+secgroup='default'
+disk=16

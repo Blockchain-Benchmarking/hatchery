@@ -1,0 +1,70 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift      # Path of the file where to print the image id
+region="$1" ; shift      # AWS region where to look for the image id
+semaphore="$1" ; shift   # Path of the semaphore file limiting concurrent reqs
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${type_image_ids}" != 'x'     # Image id for each possible instance type
+test "x${secgroup_id}" != 'x' # Security group id for the profile in the region
+test "x${keyname}" != 'x'       # Ssh key to access AWS instances once launched
+
+if [ "x${disk}" != 'x' ] ; then
+    echo "${disk}" | grep -Pq '^\d+$'             # Disk must be a number of GB
+    block="[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":${disk}}}]"
+fi
+
+
+"${0%/*}/"semaphore p "${semaphore}"
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}' ; '${0%/*}/semaphore' v '${semaphore}'" EXIT
+
+
+for type_image_id in "${type_image_ids[@]}" ; do
+    vmtype="${type_image_id%% *}"
+    image_id="${type_image_id##* }"
+
+    printf "${vmtype} ${image_id} " > "${workdir}/out"
+
+    if [ "x${block}" != 'x' ] ; then
+	blockopt="--block-device-mappings=${block}"
+    fi
+
+    if aws ec2 run-instances \
+         --region="${region}" \
+	 --image-id="${image_id}" \
+	 ${blockopt} \
+	 --security-group-ids="${secgroup_id}" \
+	 --instance-type="${vmtype}" \
+	 --query='Instances[*].InstanceId' \
+	 --output='text' >> "${workdir}/out" 2>> "${workdir}/err"
+    then
+	break
+    fi
+done
+
+
+if [ ! -s "${workdir}/out" ] ; then
+    cat "${workdir}/err" >&2
+    exit 1
+fi
+
+read vmtype image_id instance_id < "${workdir}/out"
+
+(
+    echo "type='${vmtype}'"
+    echo "image_id='${image_id}'"
+    echo "secgroup_id='${secgroup_id}'"
+    echo "ssh_key='${keyname}'"
+    if [ "x${disk}" != 'x' ] ; then
+	echo "disk='${disk}'"
+    fi
+    echo "region='${region}'"
+    echo "instance_id='${instance_id}'"
+    echo "egg='${output}'"
+) > "${output}"

@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -e
+
+semaphore="$1" ; shift
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${region}" != 'x'
+test "x${instance_id}" != 'x'
+test "x${egg}" != 'x'
+
+"${0%/*}/"semaphore p "${semaphore}"
+trap "'${0%/*}/semaphore' v '${semaphore}'" EXIT
+
+aws ec2 terminate-instances \
+  --region="${region}"\
+  --instance-ids="${instance_id}" \
+> '/dev/null'
+
+rm "${egg}"
