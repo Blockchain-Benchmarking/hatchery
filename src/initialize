@@ -1,0 +1,57 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift
+srcdir="$1" ; shift
+
+
+printf "Cannot find '${output}', create it? [Y/n] "
+while true ; do
+    read answer
+    case "${answer}" in
+	''|'y'|'Y')
+	    break
+	    ;;
+	'n'|'N')
+	    exit 0
+	    ;;
+	*)
+	    printf "Invalid option, please type 'y' or 'n' "
+	    continue
+	    ;;
+    esac
+done
+
+
+(
+    cat <<EOF
+# This Makefile has been created automatically from default settings.
+# Feel free to edit it.
+
+EOF
+
+    cat <<'EOF'
+# List of modules to enable.
+# Comment one of the followig lines to disable.
+# You can also add modules manually by adding its path to `MODULES`.
+#
+EOF
+    find "${srcdir}" -name 'mod.mk' | sed -r 's|/mod.mk$||' | while read mod
+    do
+	printf "MODULES += %s\n" "${mod}"
+    done
+) > "${output}"
+
+
+if [ "x${EDITOR}" != 'x' ] ; then
+    "${EDITOR}" "${output}"
+elif command -v 'nano' > '/dev/null' ; then
+    nano "${output}"
+elif command -v 'vim' > '/dev/null' ; then
+    vim "${output}"
+elif command -v 'vi' > '/dev/null' ; then
+    vi "${output}"
+else
+    printf "Created '${output}'. Edit it at any time.\n"
+fi

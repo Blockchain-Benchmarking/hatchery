@@ -15,7 +15,7 @@ MAKEFLAGS += --no-print-directory
 # If there is any user specific rules / variables, take them from the `.config`
 # directory.
 #
--include .config/Makefile
+include .config/Makefile
 
 
 # The default rule must be placed after the potential inclusion of user
@@ -44,9 +44,18 @@ stop:
 	$(call cmd-rmdir, $(RUN))
 
 
+$(if $(wildcard .config/Makefile), , $(eval .NOTPARALLEL:))
+
+$(call REQUIRE-DIR, .config/Makefile)
+
+.config/Makefile:
+	$(call cmd-info,  CONFIG  $@)
+	$(Q)./src/initialize $@ src
+
+
 # This is where we include additional rules / variables.
 #
-$(foreach module, $(addsuffix /mod.mk, $(wildcard src/*)), \
+$(foreach module, $(addsuffix /mod.mk, $(MODULES)), \
   $(if $(wildcard $(module)), \
     $(eval include $(module))))
 
