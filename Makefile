@@ -41,7 +41,9 @@ RUN := run/
 #
 .PHONY: stop
 stop:
-	$(call cmd-rmdir, $(RUN))
+	$(if $(wildcard $(RUN)start), $(call cmd-rmdir, $(RUN)start))
+	$(call cmd-clean, $(RUN)reach)
+	$(if $(wildcard $(RUN)), $(call cmd-rmdir, $(RUN)))
 
 
 $(if $(wildcard .config/Makefile), , $(eval .NOTPARALLEL:))
