@@ -20,23 +20,11 @@ $(AWS-NAMESPACE)-running-regions := $(sort \
   $(call region-of-machine, $($(AWS-NAMESPACE)-running-machines)))
 
 
-define template
-
-  $(call DEBUG, stop: stop/aws)
-  $(call DEBUG,)
-
-  stop: stop/aws
+stop: stop/aws
 
 
-  $(call DEBUG, stop/aws:)
-  $(call DEBUG,)
-
-  stop/aws:
-
-endef
-
-$(if $($(AWS-NAMESPACE)-running-machines), \
-  $(eval $(call template)))
+.PHONY: stop/aws
+stop/aws:
 
 
 define template
@@ -53,6 +41,7 @@ define template
   $(call DEBUG, stop/$(region-name):)
   $(call DEBUG,)
 
+  .PHONY: stop/$(region-name)
   stop/$(region-name):
 
   ))
@@ -82,6 +71,7 @@ define template
   $(call DEBUG, 	$(Q)$(AWS-SRC)stop $(AWS-SEMAPHORE) $(machine-path))
   $(call DEBUG,)
 
+  .PHONY: stop/$(machine-name)
   stop/$(machine-name): | $(AWS-SEMAPHORE)
 	$$(call cmd-print,  STOP    $(machine-path))
 	$(Q)$(AWS-SRC)stop $(AWS-SEMAPHORE) $(machine-path)

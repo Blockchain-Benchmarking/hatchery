@@ -29,3 +29,11 @@ $(AWS-SEMAPHORE):
 include $(AWS-SRC)start.mk
 include $(AWS-SRC)stop.mk
 include $(AWS-SRC)reach.mk
+
+
+stop: clean/aws
+
+
+.PHONY: clean/aws
+clean/aws: stop/aws
+	$(call cmd-clean, $(RUN)aws)
