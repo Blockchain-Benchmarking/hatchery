@@ -12,7 +12,8 @@ done
 
 test "x${type_image_ids}" != 'x'     # Image id for each possible instance type
 test "x${secgroup_id}" != 'x' # Security group id for the profile in the region
-test "x${keyname}" != 'x'       # Ssh key to access AWS instances once launched
+test "x${ssh_key}" != 'x'       # Ssh key to access AWS instances once launched
+test "x${ssh_user}" != 'x'     # Ssh user to access AWS instances once launched
 
 if [ "x${disk}" != 'x' ] ; then
     echo "${disk}" | grep -Pq '^\d+$'             # Disk must be a number of GB
@@ -29,7 +30,7 @@ for type_image_id in "${type_image_ids[@]}" ; do
     vmtype="${type_image_id%% *}"
     image_id="${type_image_id##* }"
 
-    printf "${vmtype} ${image_id} " > "${workdir}/out"
+    printf "${vmtype} ${image_id} " > "${workdir}/id"
 
     if [ "x${block}" != 'x' ] ; then
 	blockopt="--block-device-mappings=${block}"
@@ -41,15 +42,17 @@ for type_image_id in "${type_image_ids[@]}" ; do
 	 ${blockopt} \
 	 --security-group-ids="${secgroup_id}" \
 	 --instance-type="${vmtype}" \
+	 --key-name="${ssh_key}" \
 	 --query='Instances[*].InstanceId' \
-	 --output='text' >> "${workdir}/out" 2>> "${workdir}/err"
+	 --output='text' >> "${workdir}/id" 2>> "${workdir}/err"
     then
+	mv "${workdir}/id" "${workdir}/out"
 	break
     fi
 done
 
 
-if [ ! -s "${workdir}/out" ] ; then
+if [ ! -e "${workdir}/out" ] ; then
     cat "${workdir}/err" >&2
     exit 1
 fi
@@ -60,7 +63,8 @@ read vmtype image_id instance_id < "${workdir}/out"
     echo "type='${vmtype}'"
     echo "image_id='${image_id}'"
     echo "secgroup_id='${secgroup_id}'"
-    echo "ssh_key='${keyname}'"
+    echo "ssh_key='${ssh_key}'"
+    echo "ssh_user='${ssh_user}'"
     if [ "x${disk}" != 'x' ] ; then
 	echo "disk='${disk}'"
     fi

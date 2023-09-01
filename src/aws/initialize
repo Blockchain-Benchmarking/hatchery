@@ -1,0 +1,232 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift
+outdir="${output%/*}"
+profile_dir="${outdir}/profile"
+config="${outdir}/common"
+
+
+if ! command -v 'aws' > '/dev/null' ; then
+    echo
+    printf 'Cannot find `aws` command.\n'
+    printf 'Please install `aws-cli` or disable the AWS module.\n'
+    printf 'More information at: 'https://aws.amazon.com/cli/'.\n'
+    echo
+    exit 1
+fi >&2
+
+if [ ! -e "${HOME}/.aws/config" -o ! -e "${HOME}/.aws/credentials" ] ; then
+    echo
+    printf "Cannot find AWS credentials '%s'.\n" "${HOME}/.aws"
+    aws configure
+    echo
+fi
+
+printf "Cannot find '${output}', create it? [Y/n] "
+while true ; do
+    read answer
+    case "${answer}" in
+	''|'y'|'Y')
+	    break
+	    ;;
+	'n'|'N')
+	    exit 0
+	    ;;
+	*)
+	    printf "Invalid option, please type 'y' or 'n' "
+	    continue
+	    ;;
+    esac
+done
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+(
+    cat <<EOF
+# This Makefile has been created automatically from default settings.
+# Feel free to edit it.
+
+EOF
+
+    aws ec2 describe-regions \
+      --region='us-east-2' \
+      --query='Regions[*].RegionName' \
+      --output=text \
+      > "${workdir}/regions"
+
+    cat <<EOF
+# List of AWS regions to enable.
+# Comment one of the followig lines to disable.
+#
+EOF
+    printf 'AWS-REGIONS :='
+    for name in $(cat "${workdir}/regions") ; do
+	printf ' \\\n  %s' "${name}"
+    done
+    echo
+    echo
+
+    cat <<'EOF'
+# Where to look for machine profile.
+#
+# A machine profile is a shell file containing variable definitions.
+# The value of these variables is used when booting a machine to define its
+# characteristics.
+#
+#   `types`         A bash array of machine types to use.
+#                   Sorted from most desirable type to least desirable.
+#
+#   `images`        A bash array of image name patterns (with '*' wildcards).
+#                   Sorted from most desirable type to least desirable.
+#
+#   `secgroup`      The name of the security group to place the machine in.
+#
+#   `disk`          The number of GB of disk to give to the machine.
+#
+#   `ssh_user`      The name of the SSH user for connecting to the machine.
+#
+EOF
+    printf 'AWS-PROFILE-DIR ?= %s\n' "${profile_dir}"
+    printf 'AWS-PROFILES += $(wildcard $(AWS-PROFILE-DIR)/*)\n'
+    echo
+
+    cat <<EOF
+# The maximum of concurrent request to AWS.
+# Sending too many concurrent requests to AWS triggers an automatic reject.
+#
+EOF
+    printf 'AWS-REQUEST-LIMIT ?= 30\n'
+    echo
+
+    cat <<'EOF'
+# Where to look for common machine configuration.
+#
+# The common machine configuration is a shell file containing variable
+# definitions.
+# The value of these variables is used when booting a machine to define its
+# characteristics.
+#
+#   `ssh_key`       The name of the public SSH key stored in AWS to install
+#                   on the machine.
+#
+EOF
+    printf 'AWS-COMMON-CONFIG ?= %s\n' "${config}"
+) > "${workdir}/config"
+
+mv "${workdir}/config" "${output}"
+
+
+if [ "x${EDITOR}" != 'x' ] ; then
+    "${EDITOR}" "${output}"
+elif command -v 'nano' > '/dev/null' ; then
+    nano "${output}"
+elif command -v 'vim' > '/dev/null' ; then
+    vim "${output}"
+elif command -v 'vi' > '/dev/null' ; then
+    vi "${output}"
+else
+    printf "Created '${output}'. Edit it at any time.\n"
+fi
+
+
+(
+    printf 'print-AWS-PROFILE-DIR:\n'
+    printf '\t@echo $(AWS-PROFILE-DIR)\n'
+    echo
+    printf 'print-AWS-COMMON-CONFIG:\n'
+    printf '\t@echo $(AWS-COMMON-CONFIG)\n'
+    echo
+    printf 'print-AWS-REGIONS:\n'
+    printf '\t@echo $(AWS-REGIONS)\n'
+    echo
+    printf 'include %s\n' "${output}"
+) > "${workdir}/print.mk"
+
+
+profile_dir="$(make --makefile="${workdir}/print.mk" print-AWS-PROFILE-DIR)"
+
+if [ -d "${profile_dir}" -a -w "${profile_dir}" ] \
+       || mkdir "${profile_dir}" 2> '/dev/null'
+then
+    example_dir="${profile_dir}"
+else
+    example_dir="${outdir}"
+    echo
+    printf "Cannot create '${profile_dir}'.\n"
+    printf "Generate example profile in '${example_dir}' instead.\n"
+    echo
+fi
+
+(
+    cat <<EOF
+# This is an AWS machine profile example.
+#
+
+# The types of machine to be used for this profile, sorted by most desirable
+# type to use.
+#
+types=('t4g.nano' 't3.nano' 't2.nano')
+
+# The name patterns of disk images to be used for this profile, sorted by most
+# desirable image.
+# Only images compatible with the selected type are used.
+#
+images=('ubuntu/images/*22.04*20230516*' 'ami-01dd271720c1ba44f')
+
+# The name of the AWS security group to use.
+# Note: be careful to have the necessary ports open on this security group.
+#
+secgroup='default'
+
+# The number of GB for the disk of this machine.
+# If the image is smaller than this number, then it is resized to this size.
+#
+disk=16
+
+# The username to use to connect to the machine through SSH once booted.
+#
+ssh_user='ubuntu'
+EOF
+) > "${example_dir}/example"
+
+
+config="$(make --makefile="${workdir}/print.mk" print-AWS-COMMON-CONFIG)"
+
+if [ ! -e "${config}" ] ; then
+    echo
+    "${0%/*}/initialize-key" "${workdir}/key" \
+        $(make --makefile="${workdir}/print.mk" print-AWS-REGIONS)
+
+    if [ ! -e "${workdir}/key" ] ; then
+	ssh_key=
+	printf 'No SSH key specified.\n'
+	printf 'You must create or import an SSH key in AWS to boot '
+	printf 'machines.\n'
+	printf "Once done, you can edit '%s'.\n" "${config}"
+	echo
+    else
+	ssh_key="$(cat "${workdir}/key")"
+    fi
+
+    (
+	cat <<EOF
+# This file has been created automatically from default settings.
+# Feel free to edit it.
+
+EOF
+
+	cat <<EOF
+# The name of the public SSH key imported in AWS to install on newly booted
+# AWS machines.
+#
+EOF
+	printf "ssh_key='%s'\n" "${ssh_key}"
+    ) > "${workdir}/common"
+
+    mv "${workdir}/common" "${config}"
+fi

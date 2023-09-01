@@ -33,25 +33,25 @@ define template
   $(call DEBUG, $(RUN)start/aws.$(region).$(profile-name).%: \)
   $(call DEBUG, | $(RUN)aws/sg.$(region).$(profile-name) \)
   $(call DEBUG,   $(RUN)aws/img.$(region).$(profile-name) \)
-  $(call DEBUG,   $(profile-path) $(AWS-CREDENTIALS) $(AWS-SEMAPHORE) \)
+  $(call DEBUG,   $(profile-path) $(AWS-COMMON-CONFIG) $(AWS-SEMAPHORE) \)
   $(call DEBUG,   $(RUN)start)
   $(call DEBUG, 	$$(call cmd-print,  START   $$@))
   $(call DEBUG, 	$(Q)$(AWS-SRC)start $$@ $(region) $(AWS-SEMAPHORE) \)
   $(call DEBUG,           $(RUN)aws/sg.$(region).$(profile-name) \)
   $(call DEBUG,           $(RUN)aws/img.$(region).$(profile-name) \)
-  $(call DEBUG,           $(AWS-CREDENTIALS) $(profile-path))
+  $(call DEBUG,           $(AWS-COMMON-CONFIG) $(profile-path))
   $(call DEBUG,)
 
   $(RUN)start/aws.$(region).$(profile-name).%: \
   | $(RUN)aws/sg.$(region).$(profile-name) \
     $(RUN)aws/img.$(region).$(profile-name) \
-    $(profile-path) $(AWS-CREDENTIALS) $(AWS-SEMAPHORE) \
+    $(profile-path) $(AWS-COMMON-CONFIG) $(AWS-SEMAPHORE) \
     $(RUN)start
 	$$(call cmd-print,  START   $$@)
 	$(Q)$(AWS-SRC)start $$@ $(region) $(AWS-SEMAPHORE) \
           $(RUN)aws/sg.$(region).$(profile-name) \
           $(RUN)aws/img.$(region).$(profile-name) \
-          $(AWS-CREDENTIALS) $(profile-path)
+          $(AWS-COMMON-CONFIG) $(profile-path)
 
 
   # Prevent `make` from being smart and deleting it automatically as it is
