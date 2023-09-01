@@ -1,0 +1,126 @@
+#!/bin/bash
+
+set -e
+
+output="$1" ; shift
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+mkdir "${workdir}/keys"
+
+
+printf 'Looking for AWS SSH key... '
+for region in "$@"
+do
+    aws ec2 describe-key-pairs \
+      --region="${region}" \
+      --query='KeyPairs[*].KeyName' \
+      --output=text \
+      > "${workdir}/keys/${region}" &
+done
+
+wait
+
+for region in "$@"
+do
+    for name in $(cat "${workdir}/keys/${region}") ; do
+	echo "${name}"
+    done
+done | sort | uniq > "${workdir}/all_keys"
+
+
+
+nkey=$(cat "${workdir}/all_keys" | wc -l)
+
+case ${nkey} in
+    0)
+	ssh_key=
+	printf 'found none\n'
+	;;
+
+    1)
+	ssh_key="$(cat "${workdir}/all_keys")"
+	printf "found '%s'. " "${ssh_key}"
+
+	while true ; do
+	    printf "Use it? [Y/n] "
+	    read answer
+
+	    case "${answer}" in
+		''|'y'|'Y')
+		    break
+		    ;;
+		'n'|'N')
+		    ssh_key=
+		    break
+		    ;;
+		*)
+		    printf "Incorrect option, please type 'y' or 'n'\n"
+		    ;;
+	    esac
+	done
+	;;
+
+    *)
+	printf 'found %d keys:\n' ${nkey}
+
+	kid=0
+	while read key ; do
+	    printf '  %2d %s\n' ${kid} "${key}"
+	    kid=$(( kid + 1 ))
+	done < "${workdir}/all_keys"
+
+	while true ; do
+	    printf 'Which one to use? [0-%d] or [N]one ' $(( nkey - 1 ))
+	    read kid
+
+	    if [ "x${kid}" = 'x' ] ; then
+		ssh_key=''
+		break
+	    fi
+
+	    if ! echo "${kid}" | grep -Pq '^\d+$' \
+		    || [ ${kid} -ge ${nkey} ]
+	    then
+		printf 'Incorrect option, please type a number between '
+		printf "'0' and '%d' or 'n'\n" $(( nkey - 1 ))
+		continue
+	    fi
+
+	    ssh_key="$(head -n$(( kid + 1 )) "${workdir}/all_keys" \
+            	       | tail -n1)"
+
+	    break
+	done
+	;;
+esac
+
+echo
+
+if [ "x${ssh_key}" != 'x' ] ; then
+    uninstalled_regions=()
+    for region in "$@"
+    do
+	if ! grep -Pq "^(.*\s)?${ssh_key}(\s.*)?\$" "${workdir}/keys/${region}"
+	then
+	    uninstalled_regions+=("${region}")
+	fi
+    done
+
+    if [ "x${uninstalled_regions}" != 'x' ] ; then
+	printf "Warning: SSH key '%s' not installed in some regions:\n" \
+	       "${ssh_key}"
+	for region in "${uninstalled_regions[@]}"
+	do
+	    printf '  %s\n' "${region}"
+	done
+
+	echo
+    fi
+
+    echo "${ssh_key}" > "${output}"
+fi
+
