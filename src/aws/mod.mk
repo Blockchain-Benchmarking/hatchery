@@ -12,7 +12,7 @@ AWS-SRC := $(dir $(lastword $(MAKEFILE_LIST)))
 AWS-NAMESPACE := $(lastword $(MAKEFILE_LIST))
 
 
-AWS-SEMAPHORE := $(RUN)/aws/concurrency.sem
+AWS-SEMAPHORE := $(RUN)aws/concurrency.sem
 
 $(call REQUIRE-DIR, $(AWS-SEMAPHORE))
 
