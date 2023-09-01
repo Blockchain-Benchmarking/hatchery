@@ -105,7 +105,7 @@ help:
 	@echo ''
 	@echo '  help    print this message'
 	@echo ''
-	@echo '  reach   wait for a machine t have a reachable IP'
+	@echo '  reach   wait for a machine to have a reachable IP'
 	@echo ''
 	@echo '  start   start a machine'
 	@echo ''
