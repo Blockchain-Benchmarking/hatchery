@@ -103,8 +103,6 @@ help:
 	@echo ''
 	@echo 'Commands:'
 	@echo ''
-	@echo '  aws     fetch AWS configuration information'
-	@echo ''
 	@echo '  help    print this message'
 	@echo ''
 	@echo '  reach   wait for a machine to have a reachable IP'
