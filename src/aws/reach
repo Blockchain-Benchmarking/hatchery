@@ -3,7 +3,6 @@
 set -e
 
 output="$1" ; shift
-semaphore="$1" ; shift
 
 for src in "$@" ; do
     source "${src}"
@@ -21,18 +20,12 @@ trap "rm -rf '${workdir}'" EXIT
 while true ; do
     query='Reservations[*].Instances[*].[PrivateIpAddress,PublicIpAddress]'
 
-    "${0%/*}/"semaphore p "${semaphore}"
-    trap "rm -rf '${workdir}' ; '${0%/*}/semaphore' v '${semaphore}'" EXIT
-
     aws ec2 describe-instances \
       --region="${region}" \
       --instance-ids="${instance_id}" \
       --query="${query}" \
       --output=text \
     | sed -r 's/[[:space:]]+/ /g' > "${workdir}/ips"
-
-    "${0%/*}/"semaphore v "${semaphore}"
-    trap "rm -rf '${workdir}'" EXIT
 
     private_ip="$(cut -d' ' -f1 "${workdir}/ips")"
     public_ip="$(cut -d' ' -f2 "${workdir}/ips")"

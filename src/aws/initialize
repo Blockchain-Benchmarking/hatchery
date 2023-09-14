@@ -95,14 +95,6 @@ EOF
     printf 'AWS-PROFILES += $(wildcard $(AWS-PROFILE-DIR)/*)\n'
     echo
 
-    cat <<EOF
-# The maximum of concurrent request to AWS.
-# Sending too many concurrent requests to AWS triggers an automatic reject.
-#
-EOF
-    printf 'AWS-REQUEST-LIMIT ?= 30\n'
-    echo
-
     cat <<'EOF'
 # Where to look for common machine configuration.
 #

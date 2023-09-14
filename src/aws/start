@@ -4,7 +4,6 @@ set -e
 
 output="$1" ; shift      # Path of the file where to print the image id
 region="$1" ; shift      # AWS region where to look for the image id
-semaphore="$1" ; shift   # Path of the semaphore file limiting concurrent reqs
 
 for src in "$@" ; do
     source "${src}"
@@ -21,9 +20,8 @@ if [ "x${disk}" != 'x' ] ; then
 fi
 
 
-"${0%/*}/"semaphore p "${semaphore}"
 workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
-trap "rm -rf '${workdir}' ; '${0%/*}/semaphore' v '${semaphore}'" EXIT
+trap "rm -rf '${workdir}'" EXIT
 
 
 for type_image_id in "${type_image_ids[@]}" ; do
