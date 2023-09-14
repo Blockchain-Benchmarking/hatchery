@@ -17,14 +17,6 @@ $(call REQUIRE-DIR, .config/aws/config.mk)
 	$(Q)$(AWS-SRC)initialize $@
 
 
-AWS-SEMAPHORE := $(RUN)aws/concurrency.sem
-
-$(call REQUIRE-DIR, $(AWS-SEMAPHORE))
-
-$(AWS-SEMAPHORE):
-	$(call cmd-info,  SEM     $@)
-	$(Q)echo $(AWS-REQUEST-LIMIT) > $@
-
 
 include $(AWS-SRC)start.mk
 include $(AWS-SRC)stop.mk

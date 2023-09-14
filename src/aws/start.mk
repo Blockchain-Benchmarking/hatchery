@@ -33,10 +33,10 @@ define template
   $(call DEBUG, $(RUN)start/aws.$(region).$(profile-name).%: \)
   $(call DEBUG, | $(RUN)aws/sg.$(region).$(profile-name) \)
   $(call DEBUG,   $(RUN)aws/img.$(region).$(profile-name) \)
-  $(call DEBUG,   $(profile-path) $(AWS-COMMON-CONFIG) $(AWS-SEMAPHORE) \)
+  $(call DEBUG,   $(profile-path) $(AWS-COMMON-CONFIG) \)
   $(call DEBUG,   $(RUN)start)
   $(call DEBUG, 	$$(call cmd-print,  START   $$@))
-  $(call DEBUG, 	$(Q)$(AWS-SRC)start $$@ $(region) $(AWS-SEMAPHORE) \)
+  $(call DEBUG, 	$(Q)$(AWS-SRC)start $$@ $(region) \)
   $(call DEBUG,           $(RUN)aws/sg.$(region).$(profile-name) \)
   $(call DEBUG,           $(RUN)aws/img.$(region).$(profile-name) \)
   $(call DEBUG,           $(AWS-COMMON-CONFIG) $(profile-path))
@@ -45,10 +45,10 @@ define template
   $(RUN)start/aws.$(region).$(profile-name).%: \
   | $(RUN)aws/sg.$(region).$(profile-name) \
     $(RUN)aws/img.$(region).$(profile-name) \
-    $(profile-path) $(AWS-COMMON-CONFIG) $(AWS-SEMAPHORE) \
+    $(profile-path) $(AWS-COMMON-CONFIG) \
     $(RUN)start
 	$$(call cmd-print,  START   $$@)
-	$(Q)$(AWS-SRC)start $$@ $(region) $(AWS-SEMAPHORE) \
+	$(Q)$(AWS-SRC)start $$@ $(region) \
           $(RUN)aws/sg.$(region).$(profile-name) \
           $(RUN)aws/img.$(region).$(profile-name) \
           $(AWS-COMMON-CONFIG) $(profile-path)
