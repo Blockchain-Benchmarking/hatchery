@@ -1,0 +1,101 @@
+#!/bin/bash
+#
+#   base - put a remote machine in a clean state
+#
+#   Assuming that a given machine has an open ssh server, connect to this
+#   machine and put it in a clean state i.e. make sure its package manager is
+#   up to date and able to install packages.
+#
+#   The first parameter is a path of the file where to write the remote machine
+#   shell config script.
+#
+#   All remaining parameters are paths of shell files to be sourced by this
+#   script. Expect to find the following variable definitions:
+#
+#     ip            the IP address of the remote machine where there is an open
+#                   ssh server
+#
+#     ssh_user      the username to use to connect to the remote machine
+#                   through ssh
+#
+#     system        the name of the package manager used on the remote machine
+#
+#
+
+set -e
+
+output="$1" ; shift
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${ip}" != 'x'
+test "x${ssh_user}" != 'x'
+test "x${system}" != 'x'
+
+
+sshtool() {
+    "${0%/*}/sshtool" "$@"
+}
+
+
+# We observe that apt update sometimes fails on AWS machines, probably because
+# of a race condition with some AWS utility.
+#
+# We fix that (in best effort) by updating it 3 times and cleaning the package
+# manager between each update.
+#
+# If you find a better, cleaner way, feel free to contribute.
+#
+apt_script() {
+    cat <<EOF
+#!/bin/sh
+for retry in 1 2 3 ; do
+    sudo rm /var/lib/apt/lists/* -vf
+    sudo apt clean
+    sudo apt update
+done
+EOF
+}
+
+# The packages of a rolling release distribution must always be at the latest
+# version so this performs a full system update.
+#
+pacman_script() {
+    cat <<EOF
+#!/bin/sh
+sudo pacman -Syu
+EOF
+}
+
+
+sshtool test-connection "${ssh_user}"@"${ip}"
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+log="${workdir}/log"
+script="${workdir}/script"
+trap "rm -rf '${workdir}'" EXIT
+
+case "${system}" in
+    'apt')
+	apt_script > "${script}"
+	;;
+    'pacman')
+	pacman_script > "${script}"
+	;;
+    *)
+	echo "unknown system '${system}' for machine '${ip}' (${egg})" >&2
+	exit 1
+	;;
+esac
+
+
+if ! sshtool run-script "${ssh_user}"@"${ip}" < "${script}" > "${log}" 2>&1
+then
+    cat "${log}" >&2
+    exit 1
+fi 
+
+
+cat "$@" > "${output}"
