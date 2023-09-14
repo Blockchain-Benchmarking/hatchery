@@ -5,3 +5,5 @@ $(RUN)reach/aws.%: $(RUN)start/aws.% | $(RUN)reach
 	$(Q)$(AWS-SRC)reach $@ $<
 
 PHONY-COMMANDS += reach
+
+.NOTINTERMEDIATE: $(RUN)reach/aws.%
