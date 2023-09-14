@@ -3,9 +3,9 @@ define cmd-mkdir
   $(Q)mkdir $(1)
 endef
 
-define cmd-rmall
-  $(call cmd-info,  RMALL   $(strip $(1)))
-  $(Q)rm -rf $(1)
+define cmd-clean
+  $(call cmd-info,  CLEAN   $(strip $(1)))
+  $(Q)rm -rf $(1) || true 2> '/dev/null'
 endef
 
 define cmd-rmdir

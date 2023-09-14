@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+#   detect - detect the system of a remote machine
+#
+#   Assuming that a given machine has an open ssh server, connect to this
+#   machine and try to infer the system type (i.e. the package manager) by
+#   looking at what commands are available.
+#
+#   The first parameter is a path of the file where to write the updated remote
+#   machine shell config script.
+#
+#   All remaining parameters are paths of shell files to be sourced by this
+#   script. Expect to find the following variable definitions:
+#
+#     ip            the IP address of the remote machine where there is an open
+#                   ssh server
+#
+#     ssh_user      the username to use to connect to the remote machine
+#                   through ssh
+#
+
+set -e
+
+output="$1" ; shift
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${ip}" != 'x'
+test "x${ssh_user}" != 'x'
+
+
+if [ "x${system}" != 'x' ] ; then
+    cat "$@" > "${output}"
+    exit 0
+fi
+
+
+sshtool() {
+    "${0%/*}/sshtool" "$@"
+}
+
+
+sshtool test-connection "${ssh_user}"@"${ip}"
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+sshtool run-script "${ssh_user}"@"${ip}" <<EOF > "${workdir}/system"
+#!/bin/sh
+
+if command -v 'apt-get' > '/dev/null' ; then
+    echo 'apt'
+elif command -v 'pacman' > '/dev/null' ; then
+    echo 'pacman'
+elif command -v 'yum' > '/dev/null' ; then
+    echo 'yum'
+else
+    exit 1
+fi
+EOF
+
+
+system="$(cat "${workdir}/system")"
+
+
+(
+    cat "$@"
+    echo "system='${system}'"
+) > "${output}"

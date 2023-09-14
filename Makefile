@@ -15,7 +15,7 @@ MAKEFLAGS += --no-print-directory
 # If there is any user specific rules / variables, take them from the `.config`
 # directory.
 #
--include .config/Makefile
+include .config/Makefile
 
 
 # The default rule must be placed after the potential inclusion of user
@@ -41,12 +41,23 @@ RUN := run/
 #
 .PHONY: stop
 stop:
-	$(call cmd-rmdir, $(RUN))
+	$(if $(wildcard $(RUN)start), $(call cmd-rmdir, $(RUN)start))
+	$(call cmd-clean, $(RUN)reach)
+	$(if $(wildcard $(RUN)), $(call cmd-rmdir, $(RUN)))
+
+
+$(if $(wildcard .config/Makefile), , $(eval .NOTPARALLEL:))
+
+$(call REQUIRE-DIR, .config/Makefile)
+
+.config/Makefile:
+	$(call cmd-info,  CONFIG  $@)
+	$(Q)./src/initialize $@ src
 
 
 # This is where we include additional rules / variables.
 #
-$(foreach module, $(addsuffix /mod.mk, $(wildcard src/*)), \
+$(foreach module, $(addsuffix /mod.mk, $(MODULES)), \
   $(if $(wildcard $(module)), \
     $(eval include $(module))))
 
@@ -92,11 +103,9 @@ help:
 	@echo ''
 	@echo 'Commands:'
 	@echo ''
-	@echo '  aws     fetch AWS configuration information'
-	@echo ''
 	@echo '  help    print this message'
 	@echo ''
-	@echo '  reach   wait for a machine t have a reachable IP'
+	@echo '  reach   wait for a machine to have a reachable IP'
 	@echo ''
 	@echo '  start   start a machine'
 	@echo ''

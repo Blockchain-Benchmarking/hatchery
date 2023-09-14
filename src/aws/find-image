@@ -55,7 +55,7 @@ for image in "${images[@]}" ; do
           --region="${region}" \
 	  --image-ids="${image}" \
 	  --query="${query}" \
-	  --output='text'
+	  --output='text' 2> '/dev/null'
     else
 	aws ec2 describe-images \
           --region="${region}" \

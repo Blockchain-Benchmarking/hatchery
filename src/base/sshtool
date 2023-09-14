@@ -1,0 +1,126 @@
+#!/bin/bash
+#
+#   sshtool - small ssh toolbox
+#
+#   Provides a few useful tools to deal with ssh connections.
+#
+#   Subcommands:
+#
+#     run <ssh-dest> <cmd...>      Run the given <cmd...> remotely on the
+#                                  machine given as <ssh-dest> (regular ssh
+#                                  address format).
+#
+#     run-script <ssh-dest>        Send the content of stdin to the remote
+#                                  machine given as <ssh-dest> and execute it.
+#
+#     send <ssh-dest>:<path>       Send the content of stdin to the remote
+#                                  machine given as <ssh-dest> at the given
+#                                  <path>.
+#
+#     test-connection <ssh-dest>   Try to connect to the remote machine given
+#                                  as <ssh-dest>. Exit with 0 if the machine is
+#                                  reachable.
+#
+
+
+set -e
+
+
+# scp anonymous
+# Same thing as scp but without checking or remembering the ssh certificate.
+#
+scpa() {
+    scp -o StrictHostKeyChecking='no' \
+        -o UserKnownHostsFile='/dev/null' \
+        -o LogLevel='ERROR' \
+	-q "$@"
+}
+
+# ssh anonymous
+# Same thing as ssh but without checking or remembering the ssh certificate.
+#
+ssha() {
+    ssh -o StrictHostKeyChecking='no' \
+        -o UserKnownHostsFile='/dev/null' \
+        -o LogLevel='ERROR' \
+        -o ConnectTimeout=5 \
+        "$@"
+} 
+
+
+run_script() {
+    local target="$1" ; shift
+    local script="$(mktemp --suffix='.sh' "${0##*/}.XXXXXX")"
+    local ecode
+
+    trap "rm '${script}'" EXIT
+
+    cat > "${script}"
+    chmod 755 "${script}"
+
+    scpa "${script}" "${target}":".${script##*/}"
+
+    if ssha "${target}" "./.${script##*/}" ; then
+	ecode=0
+    else
+	ecode=1
+    fi
+
+    ssha "${target}" rm ".${script##*/}"
+
+    return ${ecode}
+}
+
+send() {
+    local target="$1" ; shift
+    local sndfile="$(mktemp "${0##*/}.XXXXXX")"
+    local ecode
+
+    trap "rm '${sndfile}'" EXIT
+
+    cat > "${sndfile}"
+
+    scpa "${sndfile}" "${target}"
+}
+
+test_connection() {
+    local target="$1" ; shift
+    local log="$(mktemp --suffix='.log' "${0##*/}.XXXXXX")"
+    local retry=6
+    local backoff=1
+
+    trap "rm '${log}'" EXIT
+
+    while ! ssha "${target}" true ; do
+	if [ ${retry} -eq 0 ] ; then
+	    return 1
+	fi
+
+	sleep ${backoff}
+
+	backoff=$(( backoff * 2 ))
+	retry=$(( retry - 1 ))
+    done > "${log}" 2>&1
+}
+
+
+cmd="$1" ; shift
+
+case "${cmd}" in
+    'run')
+	ssha "$@"
+	;;
+    'run-script')
+	run_script "$@"
+	;;
+    'send')
+	send "$@"
+	;;
+    'test-connection')
+	test_connection "$@"
+	;;
+    *)
+	echo "unknown subcommand '${cmd}'" >&2
+	exit 1
+	;;
+esac
