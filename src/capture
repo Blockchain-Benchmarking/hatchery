@@ -1,0 +1,128 @@
+#!/bin/bash
+#
+#   capture - run a command and conditionally display stdout / stderr
+#
+#   Depending on the verbosity, either let the command run unmodified or else
+#   store stdout / stderr and show them only in case of failure.
+#
+#   Syntax: capture [--show-stdout=[always|never|onexit|onsuccess|onfail]]
+#                   [--show-stderr=[always|never|onexit|onsuccess|onfail]]
+#                   <command...>
+#
+
+set -e
+
+
+if [ $# -eq 0 ] ; then
+    echo "missing command operand"
+    exit 1
+fi >&2
+
+
+on_stdout='always'
+on_stderr='always'
+
+while true ; do
+    case "$1" in
+	'--')
+	    shift
+	    break
+	    ;;
+	'--show-stdout='*)
+	    on_stdout="${1:14}"
+	    shift
+	    ;;
+	'--show-stderr='*)
+	    on_stderr="${1:14}"
+	    shift
+	    ;;
+	*)
+	    break
+	    ;;
+    esac
+done
+
+
+case "x${on_stdout}" in
+    'xalways'|'xnever'|'xonexit'|'xonsuccess'|'xonfail')
+        ;;
+    *)
+	echo "invalid stdout capture mode '${on_stdout}'" >&2
+	exit 1
+	;;
+esac
+
+case "x${on_stderr}" in
+    'xalways'|'xnever'|'xonexit'|'xonsuccess'|'xonfail')
+        ;;
+    *)
+	echo "invalid stdout capture mode '${on_stderr}'" >&2
+	exit 1
+	;;
+esac
+
+
+if [ "${on_stdout}" = 'always' -a "${on_stderr}" = 'always' ] ; then
+    exec "$@"
+    exit 1
+fi
+
+
+logdir="$(mktemp -d --suffix='.d' 'capture.XXXXXX')"
+trap "rm -rf '${logdir}'" EXIT
+
+if [ "${on_stdout}" = 'never' ] ; then
+    outlog='/dev/null'
+else
+    outlog="${logdir}/out"
+fi
+
+if [ "${on_stderr}" = 'never' ] ; then
+    errlog='/dev/null'
+else
+    errlog="${logdir}/err"
+fi
+
+
+set +e
+
+if [ "${on_stdout}" = 'always' ] ; then
+    "$@" 2> "${errlog}"
+    ret=$?
+elif [ "${on_stderr}" = 'always' ] ; then
+    "$@" > "${outlog}"
+    ret=$?
+else
+    "$@" > "${outlog}" 2> "${errlog}"
+    ret=$?
+fi
+
+set -e
+
+
+if [ ${ret} -eq 0 ] ; then
+    case "${on_stdout}" in
+	'onexit'|'onsuccess')
+	    cat "${outlog}"
+	    ;;
+    esac
+    case "${on_stderr}" in
+	'onexit'|'onsuccess')
+	    cat "${errlog}" >&2
+	    ;;
+    esac
+else
+    case "${on_stdout}" in
+	'onexit'|'onfail')
+	    cat "${outlog}"
+	    ;;
+    esac
+    case "${on_stderr}" in
+	'onexit'|'onfail')
+	    cat "${errlog}" >&2
+	    ;;
+    esac
+fi
+
+
+exit ${ret}
