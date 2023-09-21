@@ -14,6 +14,5 @@ define cmd-rmdir
 endef
 
 define cmd-run
-  $(call cmd-print,  RUN     $(strip $(notdir $(1))) $(firstword $(2)))
-  $(Q)$(strip $(1)) $(2)
+  $(Q)./src/capture --show-stdout=never --show-stderr=onfail $(1)
 endef
