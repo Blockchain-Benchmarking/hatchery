@@ -12,7 +12,3 @@ define cmd-rmdir
   $(call cmd-info,  RMDIR   $(strip $(1)))
   $(Q)rmdir $(1)
 endef
-
-define cmd-run
-  $(Q)./src/capture --show-stdout=never --show-stderr=onfail $(1)
-endef
