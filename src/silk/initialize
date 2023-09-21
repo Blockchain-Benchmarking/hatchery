@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+#   initialize - initialize the configuration file for the silk module
+#
+#   Create the configuration file for the silk module with a default
+#   configuration and ask the user if he wants to modify it.
+#
+#   Syntax: initialize <config-path>
+#
+
+set -e
+
+
+output="$1" ; shift
+test "x${output}" != 'x'
+
+
+if ! command -v 'silk' > '/dev/null' ; then
+    echo
+    printf 'Cannot find `silk` command.\n'
+    printf 'Please install `silk` or disable the Silk module.\n'
+    printf "More information at: '%s'.\n" \
+	   'https://github.com/Blockchain-Benchmarking/silk'
+    echo
+    exit 1
+fi >&2
+
+
+cat <<EOF > "${output}"
+# This Makefile has been created automatically from default settings.
+# Feel free to edit it.
+
+# The url of the git repository where to find the source code of Silk.
+#
+SILK_URL    ?= https://github.com/Blockchain-Benchmarking/silk.git
+
+# The commit hash, branch name or tag name to checkout in the Silk repository
+# before to compile.
+#
+SILK_COMMIT ?= master
+
+# The port to listen for Silk servers.
+#
+SILK_PORT   ?= 3200
+
+EOF
+
+
+printf "Created '${output}'\n"
