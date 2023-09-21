@@ -30,7 +30,7 @@ for vmtype in "${types[@]}" ; do
       --query="${query}" \
       --output='text' \
     || echo 'none'
-done > "${workdir}/types" 2>> "${workdir}/err" &
+done > "${workdir}/types" &
 
 
 # Get all images specifications that match the names in the `images` array.
@@ -86,7 +86,6 @@ grep -v 'none' "${workdir}/types" > "${workdir}/tmp" || true
 if [ -s "${workdir}/tmp" ] ; then
     mv "${workdir}/tmp" "${workdir}/types"
 else
-    cat "${workdir}/err" >&2
     exit 1
 fi
 
@@ -148,7 +147,6 @@ while read vmtype isa ; do
 done < "${workdir}/types" > "${workdir}/out"
 
 if [ ${count} -eq 0 ] ; then
-    cat "${workdir}/err" >&2
     exit 1
 fi
 

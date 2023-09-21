@@ -19,13 +19,14 @@ define template
   $(call REQUIRE-DIR, $(RUN)aws/img.$(region).$(profile-name))
 
   $(call DEBUG, $(RUN)aws/img.$(region).$(profile-name): $(profile-path))
-  $(call DEBUG, 	$$(call cmd-print,  IMG     $$@))
-  $(call DEBUG, 	$(Q)$(AWS-SRC)find-image $$@ $(region) $$<)
+  $(call DEBUG, 	$$(call cmd-info,  IMG     $$@))
+  $(call DEBUG, 	$$(call cmd-run, $(AWS-SRC)find-image $$@ $(region)
+                           $$<))
   $(call DEBUG,)
 
   $(RUN)aws/img.$(region).$(profile-name): $(profile-path)
-	$$(call cmd-print,  IMG     $$@)
-	$(Q)$(AWS-SRC)find-image $$@ $(region) $$<
+	$$(call cmd-info,  IMG     $$@)
+	$$(call cmd-run, $(AWS-SRC)find-image $$@ $(region) $$<)
 
 
   $(call GENERATE-DIR, $(RUN)start)
