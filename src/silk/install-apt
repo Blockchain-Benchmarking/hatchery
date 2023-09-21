@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+#   install-apt - install silk on apt based system
+#
+#   Install silk from sources on the current machine and then launch a server
+#   as the current user.
+#   This script requires sudo permission.
+#
+#   Syntax: install-apt <url> <commit> <port>
+#
+#   Download the sources from the git repository at <url> and checkout the
+#   given <commit> (or branch or tag) before to compile and install then run
+#   a silk server listening on the given tcp <port>.
+#
+
+set -e
+
+
+silk_url="$1"    ; shift ; test "x${silk_url}" != 'x'
+silk_commit="$1" ; shift ; test "x${silk_commit}" != 'x'
+silk_port="$1"   ; shift ; echo "${silk_port}" | grep -Pq '^\d+$'
+
+
+if command -v 'systemctl' > '/dev/null' ; then
+    daemon_system='systemd'
+else
+    daemon_system='user'
+fi
+
+
+packages=('git' 'golang-go' 'make')
+
+if [ "${daemon_system}" = 'user' ] ; then
+    packages+=('psmisc')
+fi
+
+sudo apt install -yy "${packages[@]}"
+
+
+case "${daemon_system}" in
+    'systemd')
+	sudo systemctl stop 'silk.service'
+	;;
+    'user')
+	sudo killall silk
+	;;
+esac || true 2> '/dev/null'
+
+
+workdir="$(mktemp -d --suffix='.d' 'silk.XXXXXX')"
+
+git clone "${silk_url}" "${workdir}"
+
+(
+    cd "${workdir}"
+    git checkout "${silk_commit}"
+
+    make all
+
+    sudo make install prefix='/usr'
+
+    if [ "${daemon_system}" = 'systemd' ] ; then
+	cat <<EOF > 'silk.service'
+[Service]
+Type=exec
+User=$(whoami)
+ExecStart=/usr/bin/silk server --verbose='trace' --tcp="${silk_port}"
+Restart=always
+EOF
+	sudo mv 'silk.service' '/etc/systemd/system/silk.service'
+	sudo systemctl daemon-reload
+    fi
+)
+
+rm -rf "${workdir}"
+
+
+case "${daemon_system}" in
+    'systemd')
+	sudo systemctl start 'silk.service'
+	;;
+    'user')
+	daemonize -e '/var/log/silk.err' /usr/bin/silk server \
+            --verbose='trace' --tcp="${silk_port}" --log='/var/log/silk.log'
+	;;
+esac
