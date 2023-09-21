@@ -7,13 +7,14 @@ define template
   $(call REQUIRE-DIR, $(RUN)aws/sg.$(region).$(profile-name))
 
   $(call DEBUG, $(RUN)aws/sg.$(region).$(profile-name): $(profile-path))
-  $(call DEBUG, 	$$(call cmd-print,  SG      $$@))
-  $(call DEBUG, 	$(Q)$(AWS-SRC)find-secgroup $$@ $(region) $$<)
+  $(call DEBUG, 	$$(call cmd-info,  SG      $$@))
+  $(call DEBUG, 	$$(call cmd-run, $(AWS-SRC)find-secgroup $$@ $(region)
+                           $$<))
   $(call DEBUG,)
 
   $(RUN)aws/sg.$(region).$(profile-name): $(profile-path)
-	$$(call cmd-print,  SG      $$@)
-	$(Q)$(AWS-SRC)find-secgroup $$@ $(region) $$<
+	$$(call cmd-info,  SG      $$@)
+	$$(call cmd-run, $(AWS-SRC)find-secgroup $$@ $(region) $$<)
 
 
   $(call REQUIRE-DIR, $(RUN)aws/img.$(region).$(profile-name))

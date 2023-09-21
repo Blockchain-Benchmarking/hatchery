@@ -68,13 +68,13 @@ define template
 
   $(call DEBUG, stop/$(machine-name):)
   $(call DEBUG, 	$$(call cmd-print,  STOP    $(machine-path)))
-  $(call DEBUG, 	$(Q)$(AWS-SRC)stop $(machine-path))
+  $(call DEBUG, 	$$(call cmd-run, $(AWS-SRC)stop $(machine-path)))
   $(call DEBUG,)
 
   .PHONY: stop/$(machine-name)
   stop/$(machine-name):
 	$$(call cmd-print,  STOP    $(machine-path))
-	$(Q)$(AWS-SRC)stop $(machine-path)
+	$$(call cmd-run, $(AWS-SRC)stop $(machine-path))
 
   )))
 endef
