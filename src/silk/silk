@@ -1,0 +1,87 @@
+#!/bin/bash
+#
+#   silk - install silk on a remote machine
+#
+#   Download silk source code from a git repository, compile it, install it and
+#   launch a silk server.
+#   Once the server has been launched, configure its kv to reflect the machine
+#   shell config file.
+#
+#   Syntax: silk <silk-url> <silk-commit> <silk-port> <output-path>
+#                <config-paths...>
+#
+#   Require config: ip        ip of the machine to install silk on
+#                   ssh_user  username to connect on the machine with ssh
+#                   system    name of package manager of the machine
+#
+#   On the remote machine accessible at the given <ip> as <ssh_user> and set
+#   with the given <system> package manager, all defined in <config-paths...>,
+#   download silk from the git repository at <silk-url> and checkout the given
+#   <silk-commit> before to compile and install it and run a silk server
+#   listening at the given tcp <silk-port>.
+#
+#   Once done, configure the kv of the newly launched silk server based on the
+#   content of <config-paths...> and output <output-path> with the `silk_port`
+#   variable defined.
+#
+
+
+set -e
+
+
+silk_url="$1"    ; shift ; test "x${silk_url}" != 'x'
+silk_commit="$1" ; shift ; test "x${silk_commit}" != 'x'
+silk_port="$1"   ; shift ; echo "${silk_port}" | grep -Pq '^\d+$'
+output="$1"      ; shift ; test "x${output}" != 'x'
+
+for src in "$@" ; do
+    source "${src}"
+done
+test "x${ip}" != 'x'
+test "x${ssh_user}" != 'x'
+test "x${system}" != 'x'
+
+
+case "${system}" in
+    'apt')
+	script="${0%/*}/install-apt"
+	;;
+    *)
+	printf "System '%s' not supported\n" "${system}" >&2
+	exit 1
+	;;
+esac
+
+
+scp -o StrictHostKeyChecking='no' \
+    -o UserKnownHostsFile='/dev/null' \
+    -o LogLevel='ERROR' \
+    -q "${script}" "${ssh_user}"@"${ip}":'.install'
+
+ssh -o StrictHostKeyChecking='no' \
+    -o UserKnownHostsFile='/dev/null' \
+    -o LogLevel='ERROR' \
+    -o ConnectTimeout=5 \
+    "${ssh_user}"@"${ip}" \
+    ./.install "${silk_url}" "${silk_commit}" ${silk_port}
+
+
+silk run -s "${ip}":${silk_port} 'cd ${HOME} ; rm .install'
+
+(
+    printf "silk kv '%s':%d" "${ip}" ${silk_port}
+
+    cat "$@" | grep -P '^[a-zA-Z]\S+=' | while read line ; do
+	name="$(echo "${line}" | sed -r 's/^([^=]*)=.*$/\1/')"
+	value="$(echo "${line}" | sed -r 's/^[^=]*=(.*)$/\1/')"
+	printf " '${name}'=${value}"
+    done
+
+    echo
+) | bash
+
+
+(
+    cat "$@"
+    echo "silk_port=${silk_port}"
+) > "${output}"
