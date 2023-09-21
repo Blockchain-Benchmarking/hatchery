@@ -85,11 +85,8 @@ send() {
 
 test_connection() {
     local target="$1" ; shift
-    local log="$(mktemp --suffix='.log' "${0##*/}.XXXXXX")"
     local retry=6
     local backoff=1
-
-    trap "rm '${log}'" EXIT
 
     while ! ssha "${target}" true ; do
 	if [ ${retry} -eq 0 ] ; then
@@ -100,7 +97,7 @@ test_connection() {
 
 	backoff=$(( backoff * 2 ))
 	retry=$(( retry - 1 ))
-    done > "${log}" 2>&1
+    done
 }
 
 

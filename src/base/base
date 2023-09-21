@@ -73,7 +73,6 @@ EOF
 sshtool test-connection "${ssh_user}"@"${ip}"
 
 workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
-log="${workdir}/log"
 script="${workdir}/script"
 trap "rm -rf '${workdir}'" EXIT
 
@@ -91,11 +90,7 @@ case "${system}" in
 esac
 
 
-if ! sshtool run-script "${ssh_user}"@"${ip}" < "${script}" > "${log}" 2>&1
-then
-    cat "${log}" >&2
-    exit 1
-fi 
+sshtool run-script "${ssh_user}"@"${ip}" < "${script}"
 
 
 cat "$@" > "${output}"
