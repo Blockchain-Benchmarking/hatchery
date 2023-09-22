@@ -1,0 +1,76 @@
+#!/bin/bash
+#
+#   initialize - initialize the configuration file for the extern module
+#
+#   Create the configuration file for the extern module with a default
+#   configuration and an example of extern machine profile.
+#
+#   Syntax: initialize <config-path>
+#
+#   Create a default configuration file at <config-path> and try to create
+#   an example profile at <config-dir>/profile/localhost where <config-dir> is
+#   the directory of <config-path>.
+#
+
+set -e
+
+output="$1" ; shift ; test "x${output}" != 'x'
+
+outdir="${output%/*}"
+profile_dir="${outdir}/profile"
+
+
+(
+    cat <<'EOF'
+# This Makefile has been created automatically from default settings.
+# Feel free to edit it.
+
+# Where to look for machine profile.
+#
+# A machine profile is a shell file containing variable definitions.
+# The value of these variables describe the machine characteristics.
+#
+#   `ip`            The IP address of the machine.
+#
+#   `ssh_user`      The name of the SSH user for connecting to the machine.
+#
+EOF
+    printf 'EXTERN-PROFILE-DIR ?= %s\n' "${profile_dir}"
+    printf 'EXTERN-PROFILES += $(wildcard $(EXTERN-PROFILE-DIR)/*)\n'
+    echo
+) > "${output}"
+
+
+printf "Created '${output}'\n"
+
+
+if [ -d "${profile_dir}" -a -w "${profile_dir}" ] \
+       || mkdir "${profile_dir}" 2> '/dev/null'
+then
+    example_dir="${profile_dir}"
+else
+    example_dir="${outdir}"
+    echo
+    printf "Cannot create '${profile_dir}'.\n"
+    printf "Generate example profile in '${example_dir}' instead.\n"
+    echo
+fi
+
+
+(
+    cat <<EOF
+# This is an extern machine profile example.
+#
+
+# The IP of this machine.
+#
+ip='127.0.0.1'
+
+# The username to use to connect to the machine through SSH once booted.
+#
+ssh_user='$(whoami)'
+EOF
+) > "${example_dir}/localhost"
+
+
+printf "Created '${example_dir}/localhost'\n"

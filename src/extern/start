@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+#   start - mark an extern machine as started
+#
+#   Create an extern machine configuration file based on its profile.
+#   Since an extern machine is managed by external ways, there is nothing much
+#   to do except copy the profile to the configuration and add the `egg` field.
+#
+#   Syntax: start <output-path> <profile-path>
+#
+#   Require config: ip        ip of the machine
+#                   ssh_user  username to connect on the machine with ssh
+#
+#   Create an extern machine configuration file at <output-path> based on its
+#   profile located at <profile-path> and which contains at least the
+#   definitions of <ip> and <ssh_user>.
+#
+
+set -e
+
+output="$1"  ; shift ; test "x${output}" != 'x'
+profile="$1" ; shift ; test "x${profile}" != 'x'
+
+
+source "${profile}"
+
+
+test "x${ip}" != 'x'
+test "x${ssh_user}" != 'x'
+
+
+(
+    cat "${profile}"
+    echo "egg='${output}'"
+) > "${output}"
