@@ -42,7 +42,7 @@ for type_image_id in "${type_image_ids[@]}" ; do
 	 --instance-type="${vmtype}" \
 	 --key-name="${ssh_key}" \
 	 --query='Instances[*].InstanceId' \
-	 --output='text' >> "${workdir}/id" 2>> "${workdir}/err"
+	 --output='text' >> "${workdir}/id"
     then
 	mv "${workdir}/id" "${workdir}/out"
 	break
@@ -51,7 +51,6 @@ done
 
 
 if [ ! -e "${workdir}/out" ] ; then
-    cat "${workdir}/err" >&2
     exit 1
 fi
 

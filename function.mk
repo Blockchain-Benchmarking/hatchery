@@ -25,6 +25,15 @@ ifeq ($(V),2)
     @echo '$(1)'
   endef
 endif
+ifeq ($(V),3)
+  define cmd-run
+    $(Q)$(1)
+  endef
+else
+  define cmd-run
+    $(Q)./src/capture --show-stdout=never --show-stderr=onfail $(1)
+  endef
+endif
 ifneq ($(filter-out 0 1 2 3, $(V)),)
   define DEBUG
     $(info $(1))
