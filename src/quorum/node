@@ -1,0 +1,55 @@
+#!/bin/bash
+#
+#   install-node - install a quorum machine from precompiled files
+#
+
+
+set -e
+set -x
+
+
+quorum_src="${0%/*}"
+
+
+output="$1"     ; shift ; test "x${output}" != 'x'
+asset_dir="$1"  ; shift ; test "x${asset_dir}" != 'x'
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${ip}" != 'x'
+test "x${silk_port}" != 'x'
+test "x${home_path}" != 'x'
+
+
+source "${quorum_src}/environment" "${home_path}"
+
+
+arch="$(silk run "${ip}:${silk_port}" uname -m)"
+asset_bin_dir="${asset_dir}/bin.${arch}"
+
+test -f "${asset_bin_dir}/geth"
+test -f "${asset_bin_dir}/istanbul"
+test -f "${asset_bin_dir}/toolbox"
+
+
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+if [ ! -e '${quorum_dir}' ] ; then
+    mkdir '${quorum_dir}'
+fi
+
+if [ ! -e '${quorum_bin_dir}' ] ; then
+    mkdir '${quorum_bin_dir}'
+fi
+EOF
+
+silk send --target-directory="${quorum_bin_dir}" \
+     "${ip}:${silk_port}" "${asset_bin_dir}/"*
+
+
+cat "$@" > "${output}"
