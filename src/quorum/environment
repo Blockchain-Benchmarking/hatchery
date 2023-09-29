@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+#   environment - defines commonly used paths and variables on hatchery machine
+#
+
+
+home_path="$1" ; shift ; test "x${home_path}" != 'x'
+
+
+# Top directory to put files related to Quorum on remote machines.
+#
+quorum_dir="${home_path}/quorum"
+
+
+# Top directory to work in for the builder machines.
+#
+quorum_builder_dir="${quorum_dir}/builder"
+
+
+# Top directory to put executables to be used by a Quorum node.
+#
+quorum_bin_dir="${quorum_dir}/bin"
