@@ -30,6 +30,13 @@ include function.mk
 include command.mk
 
 
+# Define the directory that is reserved for storing precomputed data and
+# experimental results.
+# User can redefine this location on the command line.
+#
+ASSET ?= asset/
+
+
 # Define the directory that is reserved for runtime information.
 # This directory is used by additional module rules.
 #
