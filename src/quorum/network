@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+#   create-network - create and fetch network config files from quorum machine
+#
+
+
+set -e
+set -x
+
+
+quorum_src="${0%/*}"
+
+
+output="$1"       ; shift ; test "x${output}" != 'x'
+network_size="$1" ; shift ; echo "${network_size}" | grep -Pq '^\d+$'
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${ip}" != 'x'
+test "x${silk_port}" != 'x'
+test "x${home_path}" != 'x'
+
+
+# Defines all commonly used directories used later in this script.
+#
+source "${quorum_src}/environment" "${home_path}"
+
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+mkdir "${output}"
+
+
+(
+    cd "${output}"
+
+    silk run --source --local-command --cwd="${quorum_dir}" \
+	 "${ip}:${silk_port}" <<EOF | tar -ixzpf -
+#!/bin/bash
+
+set -e
+
+export PATH='${quorum_bin_dir}':"\${PATH}"
+
+tempdir="\$(mktemp -d --suffix='.tmp' 'network.${network_size}.XXXXXX')"
+trap "rm -rf '\${tempdir}'" EXIT
+
+toolbox new-artifact -s ${network_size} "\${tempdir}/network"
+
+(
+    cd "\${tempdir}/network"
+    tar -czf - *
+)
+EOF
+)
