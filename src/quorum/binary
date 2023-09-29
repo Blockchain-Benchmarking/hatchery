@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+#
+#
+
+
+set -e
+set -x
+
+
+quorum_src="${0%/*}"
+
+
+output="$1"     ; shift ; test "x${output}" != 'x'
+
+for src in "$@" ; do
+    source "${src}"
+done
+
+test "x${ip}" != 'x'
+test "x${silk_port}" != 'x'
+test "x${home_path}" != 'x'
+
+
+# Defines all commonly used directories used later in this script.
+#
+source "${quorum_src}/environment" "${home_path}"
+
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+mkdir "${output}"
+
+
+(
+    cd "${output}"
+
+    silk run --source --cwd="${quorum_bin_dir}" "${ip}:${silk_port}" \
+	 tar -cf - '*' | tar -ixpf -
+)
