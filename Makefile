@@ -128,6 +128,9 @@ $(if $(RUN), \
 undefine template
 
 
+-include $(SETUP)
+
+
 .PHONY: help
 help:
 	@echo 'Hatchery - launch, configure and manage machines in large scale deployments'
