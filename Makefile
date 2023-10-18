@@ -62,6 +62,36 @@ $(call REQUIRE-DIR, .config/Makefile)
 	$(Q)./src/initialize $@ src
 
 
+# The Hatchery runs in two modes:
+#
+# + asset  Produces assets with a relatively small number of machines. This can
+#          be done once and then the assets are used for many experiments.
+#
+# + setup  Create experimental setups, possibly from already built assets.
+#          No asset can be build in this mode.
+#
+ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  HATCHERY-MODE := asset
+else
+  ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),)
+    HATCHERY-MODE := setup
+  else
+    HATCHERY-MODE := mixed
+  endif
+endif
+
+# Running the Hatchery to produce assets and create setups at the same time
+# is forbidden.
+#
+ifeq ($(HATCHERY-MODE),mixed)
+  $(info Error: Attempt to run in mixed mode)
+  $(info Error: Please process in two steps:)
+  $(info Error: - '$(MAKE) -j $(filter $(ASSET)%, $(MAKECMDGOALS))')
+  $(info Error: - '$(MAKE) -j $(filter-out $(ASSET)%, $(MAKECMDGOALS))')
+  $(error Abort)
+endif
+
+
 # This is where we include additional rules / variables.
 #
 $(foreach module, $(addsuffix /mod.mk, $(MODULES)), \
