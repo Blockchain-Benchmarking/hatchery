@@ -64,6 +64,7 @@ git clone "${silk_url}" "${workdir}"
 [Service]
 Type=exec
 User=$(whoami)
+WorkingDirectory=~
 ExecStart=/usr/bin/silk server --verbose='trace' --tcp="${silk_port}"
 Restart=always
 EOF
@@ -80,7 +81,7 @@ case "${daemon_system}" in
 	sudo systemctl start 'silk.service'
 	;;
     'user')
-	daemonize -e '/var/log/silk.err' /usr/bin/silk server \
+	daemonize -c "${HOME}" -e '/var/log/silk.err' /usr/bin/silk server \
             --verbose='trace' --tcp="${silk_port}" --log='/var/log/silk.log'
 	;;
 esac
