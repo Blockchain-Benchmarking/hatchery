@@ -1,0 +1,109 @@
+#!/bin/bash
+#
+#   prepare - Prepare all configuration files
+#
+#   Syntax: ./prepare <output> <input> <asset>
+#
+#   Prepare a given <output> asset used by the system during a test.
+#   Use the machine described in the <input> shell configuration file to
+#   prepare the asset.
+#   If the <input> machines needs assets to work (e.g. binaries), find these
+#   required assets in the <asset> directory.
+#   Deduce the type and properties of the <output> asset based on its name.
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+asset="$1"  ; shift ; test "x${asset}" != 'x'
+
+source "${input}"
+
+test "x${ip}" != 'x'          # has a known IP address
+test "x${silk_port}" != 'x'   # has Silk running and listening on a known port
+test "x${system}" != 'x'      # has a known package manager
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+
+# System specific prepare part ------------------------------------------------
+
+# The only asset we can build for Quorum is a "network" (e.g. static-nodes,
+# genesis files and nodekeys).
+#
+# Deduce the size of the network to build from the name: <name> = <size>.
+#
+size="${output##*/}"
+
+echo "${size}" | grep -Pq '^\d+$'
+test ${size} -gt 0
+
+
+quorum_src="${0%/*}"
+
+source "${quorum_src}/environment"
+
+arch="$(silk run "${ip}:${silk_port}" uname -m)"
+arch_asset="${asset}/bin/${arch}"
+
+test -f "${arch_asset}/istanbul"
+test -f "${arch_asset}/toolbox"
+
+
+# Upload all binaries from the hatchery machine to the prepare machine.
+#
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+if [ ! -e '${quorum_dir}' ] ; then
+    mkdir '${quorum_dir}'
+fi
+
+if [ ! -e '${quorum_bin_dir}' ] ; then
+    mkdir '${quorum_bin_dir}'
+fi
+EOF
+
+silk send --target-directory="${quorum_bin_dir}" "${ip}:${silk_port}" \
+     "${arch_asset}/"*
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+# Run the toolbox on the prepare machine to create the asset and download it
+# directly in a temporary directory.
+#
+mkdir "${workdir}/output"
+(
+    cd "${workdir}/output"
+
+    silk run --source --local-command \
+	 "${ip}:${silk_port}" <<EOF | tar -ixzpf -
+#!/bin/bash
+
+set -e
+
+export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
+
+tempdir="\$(mktemp -d --suffix='.tmp' 'network.${size}.XXXXXX')"
+trap "rm -rf '\${tempdir}'" EXIT
+
+toolbox create-network -s ${size} "\${tempdir}/network"
+
+(
+    cd "\${tempdir}/network"
+    tar -czf - *
+)
+EOF
+)
+
+mv "${workdir}/output" "${output}"
