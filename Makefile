@@ -70,13 +70,17 @@ $(call REQUIRE-DIR, .config/Makefile)
 # + setup  Create experimental setups, possibly from already built assets.
 #          No asset can be build in this mode.
 #
-ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  HATCHERY-MODE := asset
+ifeq ($(MAKECMDGOALS),)
+  HATCHERY-MODE := setup
 else
-  ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),)
-    HATCHERY-MODE := setup
+  ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),$(MAKECMDGOALS))
+    HATCHERY-MODE := asset
   else
-    HATCHERY-MODE := mixed
+    ifeq ($(filter $(ASSET)%, $(MAKECMDGOALS)),)
+      HATCHERY-MODE := setup
+    else
+      HATCHERY-MODE := mixed
+    endif
   endif
 endif
 
