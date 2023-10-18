@@ -1,0 +1,135 @@
+#!/bin/bash
+#
+#   build - Build all executables from source
+#
+#   Syntax: ./build <output> <input>
+#
+#   Build all executables for the system from source at a given version on
+#   the machine specified in the <input> configuration shell file.
+#   Assume the given <input> describes a machine with silk installed and
+#   running and has its package manager detected.
+#
+#   In case of success, download the generated executables in <output> from the
+#   building machine.
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+
+source "${input}"
+
+test "x${ip}" != 'x'          # has a known IP address
+test "x${silk_port}" != 'x'   # has Silk running and listening on a known port
+test "x${system}" != 'x'      # has a known package manager
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+
+# System specific build part --------------------------------------------------
+
+quorum_source='https://github.com/Consensys/quorum.git:master'
+istanbul_source='https://github.com/ConsenSys/istanbul-tools.git:master'
+
+
+quorum_src="${0%/*}"
+quorum_build_src="${quorum_src}/build.d"
+
+source "${quorum_src}/environment"
+
+assets=(
+    "${quorum_bin_dir}/geth"
+    "${quorum_bin_dir}/istanbul"
+    "${quorum_bin_dir}/toolbox"
+)
+
+
+case "${system}" in
+    'apt')
+	system_src="${quorum_build_src}/apt"
+	;;
+    *)
+	echo "system not supported: '${system}'" >&2
+	exit 1
+	;;
+esac
+
+
+# Upload all scripts from the hatchery machine to the builder machine.
+# A builder machine gets all the files in 'common' as well as the files in the
+# directory named by the machine system (e.g. 'apt').
+#
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+if [ ! -e '${quorum_dir}' ] ; then
+    mkdir '${quorum_dir}'
+fi
+
+if [ -e '${quorum_builder_dir}' ] ; then
+    chmod -R 777 '${quorum_builder_dir}'
+    rm -rf '${quorum_builder_dir}'
+fi
+
+mkdir '${quorum_builder_dir}'
+mkdir '${quorum_builder_dir}/script'
+EOF
+
+
+silk send --target-directory="${quorum_builder_dir}/script" --compress \
+     "${ip}:${silk_port}" "${system_src}/"* "${quorum_build_src}/common/"*
+
+silk send --target-directory="${quorum_builder_dir}" --compress \
+     "${ip}:${silk_port}" "${quorum_build_src}/toolbox"
+
+
+# Perform the install on the remote machine.
+# At the end of this command, the remote machine has all the executable files
+# located in the regular bin directory for Quorum.
+#
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+# Install all packages and tools necessary for the download and compilation of
+# Quorum from sources.
+#
+'${quorum_builder_dir}/script/install'
+
+# Create the node binary directory if it does not exist yet.
+#
+if [ ! -e '${quorum_bin_dir}' ] ; then
+    mkdir '${quorum_bin_dir}'
+fi
+
+# Build Quorum and related official tools from sources.
+# Install important tools in the node binary directory.
+#
+'${quorum_builder_dir}/script/build' '${quorum_bin_dir}'     \\
+                                     '${quorum_builder_dir}' \\
+                                     '${quorum_source}'      \\
+                                     '${istanbul_source}'
+
+# Build the Quorum toolbox for this module.
+# Install the toolbox in the node binary directory.
+#
+go build -o '${quorum_bin_dir}/toolbox' '${quorum_dir}/builder/toolbox/'*'.go'
+EOF
+
+
+mkdir "${output}"
+
+(
+    cd "${output}"
+
+    silk run --source --cwd="${quorum_bin_dir}" "${ip}:${silk_port}" \
+	 tar -cf - '*' | tar -ixpf -
+)

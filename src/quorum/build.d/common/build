@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+#   build - download and build Quorum executables and related official tools
+#
+
+
+set -e
+set -x
+
+
+output="$1"          ; shift ; test "x${output}" != 'x'
+builder_dir="$1"     ; shift ; test "x${builder_dir}" != 'x'
+quorum_source="$1"   ; shift ; test "x${quorum_source}" != 'x'
+istanbul_source="$1" ; shift ; test "x${istanbul_source}" != 'x'
+
+
+quorum_url="${quorum_source%:*}"          ; test "x${quorum_url}" != 'x'
+quorum_version="${quorum_source##*:}"     ; test "x${quorum_version}" != 'x'
+
+istanbul_url="${istanbul_source%:*}"      ; test "x${istanbul_url}" != 'x'
+istanbul_version="${istanbul_source##*:}" ; test "x${istanbul_version}" != 'x'
+
+ncpu=$(grep -c 'processor' '/proc/cpuinfo')
+
+
+
+if [ "${output:0:1}" != '/' ] ; then
+    output="${PWD}/${output}"
+fi
+
+
+if [ ! -e "${output}" ] ; then
+    mkdir "${output}"
+fi
+
+
+cd "${builder_dir}"
+
+
+git clone "${quorum_url}" 'quorum'
+git clone "${istanbul_url}" 'istanbul'
+
+
+(
+    export GOPATH="${PWD}/.go"
+
+    cd 'quorum'
+    git checkout "${quorum_version}"
+
+    make all -j${ncpu}
+
+    cp 'build/bin/geth' "${output}/geth"
+)
+
+(
+    export GOPATH="${PWD}/.go"
+
+    cd 'istanbul'
+    git checkout "${istanbul_version}"
+
+    make -j${ncpu}
+
+    cp 'build/bin/istanbul' "${output}/istanbul"
+)
