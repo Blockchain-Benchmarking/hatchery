@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+#   assign - assign one or many roles to remote machines as silk key-values
+#
+#   Syntax: assign <output> [--<role>=<input> ...]
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+mkdir "${workdir}/roles"
+
+
+prepare_kv_command() {
+    local role="$1" ; shift
+    local input="$1" ; shift
+
+    unset ip
+    unset silk_port
+
+    if ! source "${input}" ; then
+	return 1
+    fi
+
+    if [ "x${ip}" = 'x' ] ; then
+	return 1
+    fi
+
+    if [ "x${silk_port}" = 'x' ] ; then
+	return 1
+    fi
+
+    echo "silk kv '${ip}:${silk_port}' 'role/${role}'=1 &" >> "${workdir}/cmds"
+    echo "${ip}:${silk_port}" >> "${workdir}/roles/${role}"
+}
+
+
+for arg in "$@" ; do
+    if [ "x${arg:0:2}" != 'x--' ] ; then
+	echo "$0: invalid syntax: '${arg}'" >&2
+	exit 1
+    fi
+
+    pair="${arg:2}"
+    role="${pair%%=*}"
+    input="${pair#*=}"
+
+    if [ "${role}" = "${pair}" ] ; then
+	echo "$0: invalid syntax: '${arg}'" >&2
+	exit 1
+    fi
+
+    if ! echo "${role}" | grep -Pq '^[a-zA-Z_]+$' ; then
+	echo "$0: invalid syntax: '${arg}'" >&2
+	exit 1
+    fi
+
+    if ! prepare_kv_command "${role}" "${input}" ; then
+	echo "$0: invalid input: '${arg}'" >&2
+	exit 1
+    fi
+done
+
+
+ls -1 "${workdir}/roles" | while read role ; do
+    printf "%s=(" "${role}"
+
+    sep=
+    while read machine ; do
+	printf "%s'%s'" "${sep}" "${machine}"
+	sep=' '
+    done < "${workdir}/roles/${role}"
+
+    printf ")\n"
+done > "${workdir}/output"
+
+
+cat "${workdir}/roles/"* | sort | uniq | while read machine ; do
+    silk kv "${machine}" | grep '^role/' | while read role ; do
+	silk kv --delete "${machine}" "${role}"
+    done
+done &
+
+wait
+
+
+(
+    cat "${workdir}/cmds"
+    echo "wait"
+) | "${SHELL}"
+
+
+mv "${workdir}/output" "${output}"
