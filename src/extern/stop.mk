@@ -27,5 +27,3 @@ $(foreach machine, $(extern-running-machines), \
   $(eval $(call template, $(machine))))
 
 undefine template
-
-PHONY-COMMANDS += stop

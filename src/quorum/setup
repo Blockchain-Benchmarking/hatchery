@@ -1,0 +1,212 @@
+#!/bin/bash
+#
+#   setup - Setup a group of machines to run a distributed system
+#
+#   Syntax: ./setup <output> <input> <asset>
+#
+#   Read the roles written in the given <input> file and configure the
+#   corresponding nodes to behave accordingly for the system.
+#   If the nodes need some assets to work, they find them in the <asset>
+#   directory.
+#
+#   On success, write silk routes corresponding to each role in the <output>
+#   file.
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+asset="$1"  ; shift ; test "x${asset}" != 'x'
+
+source "${input}"
+
+
+# System specific setup part --------------------------------------------------
+
+quorum_port=9000
+quorum_rpcport=8000
+
+
+# Check that there is at least 1 server defined in <input>.
+#
+test "x${server}" != 'x'
+test ${#server[@]} -gt 0
+
+
+quorum_src="${0%/*}"
+
+source "${quorum_src}/environment"
+
+
+# Check that the network asset contains the right files.
+#
+etc_asset="${asset}/etc/${#server[@]}"
+
+test -f "${etc_asset}/all/genesis.json"
+test -f "${etc_asset}/all/static-nodes.json"
+for node in $(seq 0 $(( ${#server[@]} - 1 ))) ; do
+    test -f "${etc_asset}/${node}/nodekey"
+done
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+# Build local informations.
+# We build three values:
+# - route    scalar variable which is the silk route to all servers
+# - servers  array variable containing the servers as they see each others
+# - arch     directory containing the arch of each server
+#
+route='('
+sep=''
+
+servers=()
+
+mkdir "${workdir}/arch"
+index=0
+
+for machine in "${server[@]}" ; do
+    route="${route}${sep}${machine}"
+    sep='|'
+
+    ip="${machine%:*}"
+    servers+=("${ip}:${quorum_port}")
+
+    silk run "${machine}" uname -m > "${workdir}/arch/${index}" &
+    index=$(( index + 1 ))
+done
+
+route="${route})"
+
+wait
+
+
+# Check that for each arch used by some server, we have the binary assets
+# present in the <asset> directory.
+#
+cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
+    bin_asset="${asset}/bin/${arch}"
+
+    if [ ! -e "${bin_asset}" ] ; then
+	echo "Error: Missing binaries for '${arch}': '${bin_asset}'" >&2
+	exit 1
+    fi
+
+    test -f "${bin_asset}/geth"
+    test -f "${bin_asset}/istanbul"
+    test -f "${bin_asset}/toolbox"
+done
+
+
+# server script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+cat <<EOF > "${workdir}/server"
+#!/bin/bash
+
+set -e
+set -x
+
+export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
+
+export PRIVATE_CONFIG=ignore
+
+geth --datadir "\${HOME}/${quorum_run_dir}" \\
+     --allow-insecure-unlock \\
+     --nodiscover \\
+     --istanbul.blockperiod 5 \\
+     --syncmode full \\
+     --mine \\
+     --miner.threads 1 \\
+     --verbosity 2 \\
+     --networkid 10 \\
+     --ws \\
+     --ws.addr '0.0.0.0' \\
+     --ws.port ${quorum_rpcport} \\
+     --ws.api admin,eth,debug,miner,net,txpool,personal,web3,istanbul \\
+     --ws.origins "*" \\
+     --emitcheckpoints \\
+     --port ${quorum_port}
+EOF
+
+chmod 755 "${workdir}/server"
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Upload the scripts and the assets to the relevant machines
+#
+silk run --source --local-command "${route}" <<EOF
+#!/bin/bash
+
+set -e
+
+if [ ! -e '${quorum_dir}' ] ; then
+    mkdir '${quorum_dir}'
+fi
+
+if [ ! -e '${quorum_bin_dir}' ] ; then
+    mkdir '${quorum_bin_dir}'
+fi
+
+if [ -e '${quorum_run_dir}' ] ; then
+    rm -rf '${quorum_run_dir}'
+fi
+
+mkdir '${quorum_run_dir}'
+EOF
+
+
+cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
+    arch_route='('
+    sep=''
+
+    for i in $(seq 0 $(( ${#server[@]} ))) ; do
+	if [ "x$(cat "${workdir}/arch/${i}")" = "x${arch}" ] ; then
+	    arch_route="${arch_route}${sep}${server[${i}]}"
+	    sep='|'
+	fi
+    done
+
+    arch_route="${arch_route})"
+
+    bin_asset="${asset}/bin/${arch}"
+
+    silk send --target-directory="${quorum_bin_dir}" \
+	 "${route}" "${bin_asset}/"*
+done
+
+silk send --compress --target-directory="${quorum_run_dir}" \
+     "${route}" "${etc_asset}/all/"* "${workdir}/server"
+
+for node in $(seq 0 $(( ${#server[@]} - 1 ))) ; do
+    silk send --compress --target-directory="${quorum_run_dir}" \
+	 "${server[$node]}" "${etc_asset}/${node}/"* &
+done
+
+wait
+
+
+# Use the toolbox to specialize the uploaded network asset so it points to
+# the actual servers.
+#
+silk run --source --local-command "${route}" <<EOF
+#!/bin/bash
+
+set -e
+
+export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
+
+toolbox config-node '${quorum_run_dir}' ${servers[@]}
+
+geth --datadir '${quorum_run_dir}' init '${quorum_run_dir}/genesis.json'
+EOF
+
+
+(
+    echo "servers='${route}'"
+) > "${output}"

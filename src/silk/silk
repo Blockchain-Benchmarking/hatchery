@@ -47,7 +47,7 @@ case "${system}" in
 	script="${0%/*}/install-apt"
 	;;
     *)
-	printf "System '%s' not supported\n" "${system}" >&2
+	echo "system not supported: '${system}'" >&2
 	exit 1
 	;;
 esac

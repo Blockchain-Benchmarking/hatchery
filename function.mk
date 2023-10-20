@@ -66,7 +66,15 @@ endef
 
 
 define EXISTS
-$(strip $(wildcard $(1)))
+  $(strip $(wildcard $(1)))
+endef
+
+define DIRECTORIES
+  $(strip $(patsubst %/, %, $(filter %/, $(wildcard $(addsuffix /,$(1))))))
+endef
+
+define REGULARS
+  $(filter-out $(call DIRECTORIES, $(1)), $(1))
 endef
 
 
