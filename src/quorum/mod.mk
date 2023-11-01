@@ -6,6 +6,7 @@ module-cache-path := $(module-path).cache/
 
 
 include src/generic/build.mk
+include src/generic/diablo.mk
 include src/generic/prepare.mk
 include src/generic/system.mk
 
@@ -14,6 +15,8 @@ include src/generic/system.mk
 # machine. These rules make the scripts depend on the compiled toolbox for this
 # reason.
 #
+$(module-path)prepare-diablo-asset: $(module-cache-path)toolbox
+
 $(module-path)system: $(module-cache-path)toolbox
 
 
