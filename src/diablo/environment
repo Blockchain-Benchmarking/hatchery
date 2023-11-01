@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+#   environment - defines commonly used paths and variables on hatchery machine
+#
+
+
+# Top directory of this module.
+#
+diablo_src="${0%/*}"
+
+
+# Top directory for build sources for this module.
+#
+diablo_build_src="${diablo_src}/build.d"
+
+
+# Top directory to put files related to Diablo on remote machines.
+#
+diablo_dir="diablo"
+
+
+# Top directory to work in for the builder machines.
+#
+diablo_builder_dir="${diablo_dir}/builder"
+
+
+# Top directory to put executables to be used by a Diablo node.
+#
+diablo_bin_dir="${diablo_dir}/bin"
+
+
+# Top directory to put config and script files during a Diablo deployment.
+#
+diablo_etc_dir="${diablo_dir}/etc"
+
+
+# The port used by the Diablo primary to listen for secondaries.
+#
+diablo_port=7000

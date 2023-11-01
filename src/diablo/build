@@ -1,0 +1,116 @@
+#!/bin/bash
+#
+#   build - Build all executables from source
+#
+#   Syntax: ./build <output> <input>
+#
+#   Build all executables for the system from source at a given version on
+#   the machine specified in the <input> configuration shell file.
+#   Assume the given <input> describes a machine with silk installed and
+#   running and has its package manager detected.
+#
+#   In case of success, download the generated executables in <output> from the
+#   building machine.
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+
+source "${input}"
+
+test "x${ip}" != 'x'          # has a known IP address
+test "x${silk_port}" != 'x'   # has Silk running and listening on a known port
+test "x${system}" != 'x'      # has a known package manager
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+
+# System specific build part --------------------------------------------------
+
+diablo_source='https://github.com/Blockchain-Benchmarking/diablo.git:v3'
+assets=('diablo')
+
+
+source "${0%/*}/environment"
+
+
+case "${system}" in
+    'apt')
+	system_src="${diablo_build_src}/apt"
+	;;
+    *)
+	echo "system not supported: '${system}'" >&2
+	exit 1
+	;;
+esac
+
+
+# Upload all scripts from the hatchery machine to the builder machine.
+# A builder machine gets all the files in 'common' as well as the files in the
+# directory named by the machine system (e.g. 'apt').
+#
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+if [ ! -e '${diablo_dir}' ] ; then
+    mkdir '${diablo_dir}'
+fi
+
+if [ -e '${diablo_builder_dir}' ] ; then
+    chmod -R 777 '${diablo_builder_dir}'
+    rm -rf '${diablo_builder_dir}'
+fi
+
+mkdir '${diablo_builder_dir}'
+mkdir '${diablo_builder_dir}/script'
+EOF
+
+
+silk send --target-directory="${diablo_builder_dir}/script" --compress \
+     "${ip}:${silk_port}" "${system_src}/"* "${diablo_build_src}/common/"*
+
+
+# Perform the install on the remote machine.
+# At the end of this command, the remote machine has all the executable files
+# located in the regular bin directory for Diablo.
+#
+silk run --source --local-command "${ip}:${silk_port}" <<EOF
+#!/bin/bash
+
+set -e
+
+# Install all packages and tools necessary for the download and compilation of
+# Diablo from sources.
+#
+'${diablo_builder_dir}/script/install'
+
+# Create the builder binary directory if it does not exist yet.
+#
+if [ ! -e '${diablo_bin_dir}' ] ; then
+    mkdir '${diablo_bin_dir}'
+fi
+
+# Build Diablo from sources and install it in the binary directory.
+#
+'${diablo_builder_dir}/script/build' '${diablo_bin_dir}'     \\
+                                     '${diablo_builder_dir}' \\
+                                     '${diablo_source}'
+EOF
+
+
+mkdir "${output}"
+
+(
+    cd "${output}"
+
+    silk run --source --cwd="${diablo_bin_dir}" "${ip}:${silk_port}" \
+	 tar -cf - "${assets[@]}" | tar -ixpf -
+)
