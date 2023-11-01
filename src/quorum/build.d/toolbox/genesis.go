@@ -45,7 +45,7 @@ type GenesisConfig struct {
 }
 
 type GenesisAlloc struct {
-	Balance string `json:"balance"`
+	Balance BigInt `json:"balance"`
 }
 
 type IstanbulConfig struct {

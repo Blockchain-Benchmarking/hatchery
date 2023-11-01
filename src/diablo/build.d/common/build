@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+#   build - download and build Diablo executable
+#
+
+
+set -e
+set -x
+
+
+output="$1"          ; shift ; test "x${output}" != 'x'
+builder_dir="$1"     ; shift ; test "x${builder_dir}" != 'x'
+diablo_source="$1"   ; shift ; test "x${diablo_source}" != 'x'
+
+
+diablo_url="${diablo_source%:*}"          ; test "x${diablo_url}" != 'x'
+diablo_version="${diablo_source##*:}"     ; test "x${diablo_version}" != 'x'
+
+ncpu=$(grep -c 'processor' '/proc/cpuinfo')
+
+
+
+if [ "${output:0:1}" != '/' ] ; then
+    output="${PWD}/${output}"
+fi
+
+
+if [ ! -e "${output}" ] ; then
+    mkdir "${output}"
+fi
+
+
+cd "${builder_dir}"
+
+
+git clone "${diablo_url}" 'diablo'
+
+
+(
+    export GOPATH="${PWD}/.go"
+
+    cd 'diablo'
+    git checkout "${diablo_version}"
+
+    make reqs
+    make diablo -j${ncpu}
+
+    cp 'diablo' "${output}/diablo"
+)

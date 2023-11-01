@@ -2,13 +2,13 @@
 #
 #   prepare - Prepare all configuration files
 #
-#   Syntax: ./prepare <output> <input> <asset>
+#   Syntax: ./prepare <output> <input> <arch-asset>
 #
 #   Prepare a given <output> asset used by the system during a test.
 #   Use the machine described in the <input> shell configuration file to
 #   prepare the asset.
 #   If the <input> machines needs assets to work (e.g. binaries), find these
-#   required assets in the <asset> directory.
+#   required assets in the <arch-asset> directory.
 #   Deduce the type and properties of the <output> asset based on its name.
 #
 
@@ -16,9 +16,9 @@
 set -e
 
 
-output="$1" ; shift ; test "x${output}" != 'x'
-input="$1"  ; shift ; test "x${input}" != 'x'
-asset="$1"  ; shift ; test "x${asset}" != 'x'
+output="$1"     ; shift ; test "x${output}" != 'x'
+input="$1"      ; shift ; test "x${input}" != 'x'
+arch_asset="$1" ; shift ; test "x${arch_asset}" != 'x'
 
 source "${input}"
 
@@ -48,8 +48,6 @@ quorum_src="${0%/*}"
 
 source "${quorum_src}/environment"
 
-arch="$(silk run "${ip}:${silk_port}" uname -m)"
-arch_asset="${asset}/bin/${arch}"
 
 test -f "${arch_asset}/istanbul"
 test -f "${arch_asset}/toolbox"
@@ -60,15 +58,12 @@ test -f "${arch_asset}/toolbox"
 silk run --source --local-command "${ip}:${silk_port}" <<EOF
 #!/bin/bash
 
+mkdir '${quorum_dir}' 2> '/dev/null'
+mkdir '${quorum_bin_dir}' 2> '/dev/null'
+
 set -e
 
-if [ ! -e '${quorum_dir}' ] ; then
-    mkdir '${quorum_dir}'
-fi
-
-if [ ! -e '${quorum_bin_dir}' ] ; then
-    mkdir '${quorum_bin_dir}'
-fi
+test -d '${quorum_bin_dir}'
 EOF
 
 silk send --target-directory="${quorum_bin_dir}" "${ip}:${silk_port}" \
@@ -94,13 +89,13 @@ set -e
 
 export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
 
-tempdir="\$(mktemp -d --suffix='.tmp' 'network.${size}.XXXXXX')"
+tempdir="\$(mktemp -d --suffix='.tmp' 'asset.${size}.XXXXXX')"
 trap "rm -rf '\${tempdir}'" EXIT
 
-toolbox create-network -s ${size} "\${tempdir}/network"
+toolbox new -s ${size} "\${tempdir}/asset"
 
 (
-    cd "\${tempdir}/network"
+    cd "\${tempdir}/asset"
     tar -czf - *
 )
 EOF

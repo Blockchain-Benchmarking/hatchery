@@ -24,7 +24,7 @@ type HexString struct {
 // ----------------------------------------------------------------------------
 
 
-func (this *BigInt) MarshalJSON() ([]byte, error) {
+func (this BigInt) MarshalJSON() ([]byte, error) {
 	return json.Marshal("0x" + this.Text(16))
 
 }
@@ -59,7 +59,7 @@ func (this *BigInt) UnmarshalJSON(data []byte) error {
 
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-func (this *HexString) MarshalJSON() ([]byte, error) {
+func (this HexString) MarshalJSON() ([]byte, error) {
 	return json.Marshal("0x" + hex.EncodeToString(this.Data))
 
 }

@@ -1,0 +1,55 @@
+#!/bin/bash
+#
+#   prepare-diablo-asset - create an asset for Diablo experiements
+#
+#   Syntax: ./prepare-diablo-asset <output> <input>
+#
+#   Copy the asset located in the given <input> directory to the <output>
+#   directory and then adds user accounts in the new <output> asset then create
+#   an 'accounts.yaml' file that can be used as an 'env' variable by a Diablo
+#   primary to specify pre-generated accounts.
+#
+#   Additionally, adds a 'env.conf' file indicating that the key value pair
+#   'accounts=accounts.yaml' should be passed as an '--env' option to the
+#   Diablo primary.
+#
+
+
+set -e
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+
+# System specific prepare part ------------------------------------------------
+
+accounts=10000
+
+source "${0%/*}/environment"
+
+
+# The `toolbox` binary must have been compiled in order to generate and format
+# the accounts in the new asset.
+#
+command -v toolbox > '/dev/null'
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+cp -R "${input}" "${workdir}/output"
+mkdir "${workdir}/output/diablo"
+
+toolbox add-accounts -a ${accounts} "${workdir}/output"
+
+toolbox get-accounts "${workdir}/output" \
+	> "${workdir}/output/diablo/accounts.yaml"
+
+echo "accounts=accounts.yaml" >> "${workdir}/output/diablo/env.conf"
+
+
+mv "${workdir}/output" "${output}"
