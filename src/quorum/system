@@ -1,13 +1,14 @@
 #!/bin/bash
 #
-#   setup - Setup a group of machines to run a distributed system
+#   system - Setup a group of machines to run a distributed system
 #
-#   Syntax: ./setup <output> <input> <asset>
+#   Syntax: ./setup <output> <etc-asset> <assign> <asset>
 #
-#   Read the roles written in the given <input> file and configure the
+#   Read the roles written in the given <assign> file and configure the
 #   corresponding nodes to behave accordingly for the system.
-#   If the nodes need some assets to work, they find them in the <asset>
-#   directory.
+#   If the nodes need some assets to work, they find the specific asset for
+#   the current deployment in <etc-asset> while the top asset directory is
+#   specified by <asset>.
 #
 #   On success, write silk routes corresponding to each role in the <output>
 #   file.
@@ -17,36 +18,41 @@
 set -e
 
 
-output="$1" ; shift ; test "x${output}" != 'x'
-input="$1"  ; shift ; test "x${input}" != 'x'
-asset="$1"  ; shift ; test "x${asset}" != 'x'
+output="$1"    ; shift ; test "x${output}" != 'x'
+etc_asset="$1" ; shift ; test "x${etc_asset}" != 'x'
+assign="$1"    ; shift ; test "x${assign}" != 'x'
+asset="$1"     ; shift ; test "x${asset}" != 'x'
 
-source "${input}"
+source "${assign}"
 
 
 # System specific setup part --------------------------------------------------
 
-quorum_port=9000
-quorum_rpcport=8000
+# Name of the deployment.
+# This name is reflected on the machines where the system is installed: the
+# configuration asset is copied at "${quorum_etc_dir}/${etc_name}".
+#
+etc_name="${etc_asset##*/}"
 
-
-# Check that there is at least 1 server defined in <input>.
+# Check that there is at least 1 server defined in <assign>.
 #
 test "x${server}" != 'x'
 test ${#server[@]} -gt 0
 
 
-quorum_src="${0%/*}"
-
-source "${quorum_src}/environment"
+source "${0%/*}/environment"
 
 
-# Check that the network asset contains the right files.
+# The `toolbox` binary must have been compiled in order to generate and format
+# the accounts in the new asset.
 #
-etc_asset="${asset}/etc/${#server[@]}"
+command -v toolbox > '/dev/null'
 
-test -f "${etc_asset}/all/genesis.json"
-test -f "${etc_asset}/all/static-nodes.json"
+
+# Check that the config asset <etc-asset> contains the right files.
+#
+test -f "${etc_asset}/servers/genesis.json"
+test -f "${etc_asset}/servers/static-nodes.json"
 for node in $(seq 0 $(( ${#server[@]} - 1 ))) ; do
     test -f "${etc_asset}/${node}/nodekey"
 done
@@ -111,11 +117,24 @@ cat <<EOF > "${workdir}/server"
 set -e
 set -x
 
-export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
+script_dir="\${0%/*}"
 
+export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
 export PRIVATE_CONFIG=ignore
 
-geth --datadir "\${HOME}/${quorum_run_dir}" \\
+
+if [ -e "\${script_dir}/geth" ] ; then
+    rm -rf "\${script_dir}/geth"
+fi
+
+if [ -e "\${script_dir}/keystore" ] ; then
+    rm -rf "\${script_dir}/keystore"
+fi
+
+geth --datadir "\${script_dir}" init "\${script_dir}/genesis.json"
+
+
+geth --datadir "\${script_dir}" \\
      --allow-insecure-unlock \\
      --nodiscover \\
      --istanbul.blockperiod 5 \\
@@ -143,24 +162,51 @@ chmod 755 "${workdir}/server"
 silk run --source --local-command "${route}" <<EOF
 #!/bin/bash
 
+mkdir '${quorum_dir}' 2> '/dev/null'
+mkdir '${quorum_bin_dir}' 2> '/dev/null'
+mkdir '${quorum_etc_dir}' 2> '/dev/null'
+
 set -e
 
-if [ ! -e '${quorum_dir}' ] ; then
-    mkdir '${quorum_dir}'
+test -d '${quorum_etc_dir}'
+
+if [ -e '${quorum_etc_dir}/${etc_name}' ] ; then
+    rm -rf '${quorum_etc_dir}/${etc_name}'
 fi
 
-if [ ! -e '${quorum_bin_dir}' ] ; then
-    mkdir '${quorum_bin_dir}'
-fi
-
-if [ -e '${quorum_run_dir}' ] ; then
-    rm -rf '${quorum_run_dir}'
-fi
-
-mkdir '${quorum_run_dir}'
+mkdir '${quorum_etc_dir}/${etc_name}'
 EOF
 
 
+# Configure the server addresses in a copy of the config asset <etc-asset> and
+# send this specialized version along with the server script.
+#
+cp -R "${etc_asset}" "${workdir}/etc"
+
+for machine in ${servers[@]} ; do
+    echo "${machine}"
+done | toolbox set-servers "${workdir}/etc"
+
+silk send --compress --target-directory="${quorum_etc_dir}/${etc_name}" \
+     "${route}" "${workdir}/etc/servers/"* "${workdir}/server"
+
+
+# Also send the server specific files to each server.
+# Because these files are different between two servers, we have no choice but
+# using a `silk send` command per server.
+#
+for node in $(seq 0 $(( ${#server[@]} - 1 ))) ; do
+    silk send --compress --target-directory="${quorum_etc_dir}/${etc_name}" \
+	 "${server[$node]}" "${workdir}/etc/${node}/"* &
+done
+
+wait
+
+
+# Send the appropriate binary assets.
+# For efficiency reasons, create one route per processor architecture and
+# broadcast in a single `silk send` command.
+#
 cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
     arch_route='('
     sep=''
@@ -180,33 +226,5 @@ cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
 	 "${route}" "${bin_asset}/"*
 done
 
-silk send --compress --target-directory="${quorum_run_dir}" \
-     "${route}" "${etc_asset}/all/"* "${workdir}/server"
 
-for node in $(seq 0 $(( ${#server[@]} - 1 ))) ; do
-    silk send --compress --target-directory="${quorum_run_dir}" \
-	 "${server[$node]}" "${etc_asset}/${node}/"* &
-done
-
-wait
-
-
-# Use the toolbox to specialize the uploaded network asset so it points to
-# the actual servers.
-#
-silk run --source --local-command "${route}" <<EOF
-#!/bin/bash
-
-set -e
-
-export PATH="\${PWD}/${quorum_bin_dir}:\${PATH}"
-
-toolbox config-node '${quorum_run_dir}' ${servers[@]}
-
-geth --datadir '${quorum_run_dir}' init '${quorum_run_dir}/genesis.json'
-EOF
-
-
-(
-    echo "servers='${route}'"
-) > "${output}"
+echo "servers='${route}'" > "${output}"

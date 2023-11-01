@@ -4,6 +4,28 @@
 #
 
 
+# Top directory of this module.
+#
+quorum_src="${0%/*}"
+
+
+# Top directory for build sources for this module.
+#
+quorum_build_src="${quorum_src}/build.d"
+
+
+# Cache directory for this module.
+# The cache is cleaned by the module when calling `make stop`.
+#
+quorum_cache_src="${quorum_src}/.cache"
+
+
+# This module uses the cache to put some binaries which are used in some other
+# scripts.
+#
+export PATH="${quorum_cache_src}:${PATH}"
+
+
 # Top directory to put files related to Quorum on remote machines.
 #
 quorum_dir="quorum"
@@ -21,4 +43,14 @@ quorum_bin_dir="${quorum_dir}/bin"
 
 # Top directory to put files during a Quorum deployment.
 #
-quorum_run_dir="${quorum_dir}/run"
+quorum_etc_dir="${quorum_dir}/etc"
+
+
+# The port used by Quorum servers to communicate with each others and reach
+# consensus.
+#
+quorum_port=9000
+
+# The port used by Quorum servers to listen for clients (WebSocket).
+#
+quorum_rpcport=8000

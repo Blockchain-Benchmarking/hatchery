@@ -37,16 +37,7 @@ quorum_source='https://github.com/Consensys/quorum.git:master'
 istanbul_source='https://github.com/ConsenSys/istanbul-tools.git:master'
 
 
-quorum_src="${0%/*}"
-quorum_build_src="${quorum_src}/build.d"
-
-source "${quorum_src}/environment"
-
-assets=(
-    "${quorum_bin_dir}/geth"
-    "${quorum_bin_dir}/istanbul"
-    "${quorum_bin_dir}/toolbox"
-)
+source "${0%/*}/environment"
 
 
 case "${system}" in
@@ -121,7 +112,8 @@ fi
 # Build the Quorum toolbox for this module.
 # Install the toolbox in the node binary directory.
 #
-go build -o '${quorum_bin_dir}/toolbox' '${quorum_dir}/builder/toolbox/'*'.go'
+make -C '${quorum_dir}/builder/toolbox'
+mv '${quorum_dir}/builder/toolbox/toolbox' '${quorum_bin_dir}/toolbox'
 EOF
 
 

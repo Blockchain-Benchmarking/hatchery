@@ -17,6 +17,7 @@ module-cache-path := $(module-path).cache/
 # machine. These rules make the scripts depend on the compiled toolbox for this
 # reason.
 #
+$(module-path)system: $(module-cache-path)toolbox
 
 
 toolbox-deps := $(call REGULARS, $(call FIND, $(module-path)build.d/toolbox))
