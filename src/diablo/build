@@ -33,8 +33,8 @@ fi
 
 # System specific build part --------------------------------------------------
 
-quorum_source='https://github.com/Consensys/quorum.git:master'
-istanbul_source='https://github.com/ConsenSys/istanbul-tools.git:master'
+diablo_source='https://github.com/Blockchain-Benchmarking/diablo.git:v3'
+assets=('diablo')
 
 
 source "${0%/*}/environment"
@@ -42,7 +42,7 @@ source "${0%/*}/environment"
 
 case "${system}" in
     'apt')
-	system_src="${quorum_build_src}/apt"
+	system_src="${diablo_build_src}/apt"
 	;;
     *)
 	echo "system not supported: '${system}'" >&2
@@ -60,30 +60,27 @@ silk run --source --local-command "${ip}:${silk_port}" <<EOF
 
 set -e
 
-if [ ! -e '${quorum_dir}' ] ; then
-    mkdir '${quorum_dir}'
+if [ ! -e '${diablo_dir}' ] ; then
+    mkdir '${diablo_dir}'
 fi
 
-if [ -e '${quorum_builder_dir}' ] ; then
-    chmod -R 777 '${quorum_builder_dir}'
-    rm -rf '${quorum_builder_dir}'
+if [ -e '${diablo_builder_dir}' ] ; then
+    chmod -R 777 '${diablo_builder_dir}'
+    rm -rf '${diablo_builder_dir}'
 fi
 
-mkdir '${quorum_builder_dir}'
-mkdir '${quorum_builder_dir}/script'
+mkdir '${diablo_builder_dir}'
+mkdir '${diablo_builder_dir}/script'
 EOF
 
 
-silk send --target-directory="${quorum_builder_dir}/script" --compress \
-     "${ip}:${silk_port}" "${system_src}/"* "${quorum_build_src}/common/"*
-
-silk send --target-directory="${quorum_builder_dir}" --compress \
-     "${ip}:${silk_port}" "${quorum_build_src}/toolbox"
+silk send --target-directory="${diablo_builder_dir}/script" --compress \
+     "${ip}:${silk_port}" "${system_src}/"* "${diablo_build_src}/common/"*
 
 
 # Perform the install on the remote machine.
 # At the end of this command, the remote machine has all the executable files
-# located in the regular bin directory for Quorum.
+# located in the regular bin directory for Diablo.
 #
 silk run --source --local-command "${ip}:${silk_port}" <<EOF
 #!/bin/bash
@@ -91,29 +88,21 @@ silk run --source --local-command "${ip}:${silk_port}" <<EOF
 set -e
 
 # Install all packages and tools necessary for the download and compilation of
-# Quorum from sources.
+# Diablo from sources.
 #
-'${quorum_builder_dir}/script/install'
+'${diablo_builder_dir}/script/install'
 
-# Create the node binary directory if it does not exist yet.
+# Create the builder binary directory if it does not exist yet.
 #
-if [ ! -e '${quorum_bin_dir}' ] ; then
-    mkdir '${quorum_bin_dir}'
+if [ ! -e '${diablo_bin_dir}' ] ; then
+    mkdir '${diablo_bin_dir}'
 fi
 
-# Build Quorum and related official tools from sources.
-# Install important tools in the node binary directory.
+# Build Diablo from sources and install it in the binary directory.
 #
-'${quorum_builder_dir}/script/build' '${quorum_bin_dir}'     \\
-                                     '${quorum_builder_dir}' \\
-                                     '${quorum_source}'      \\
-                                     '${istanbul_source}'
-
-# Build the Quorum toolbox for this module.
-# Install the toolbox in the node binary directory.
-#
-make -C '${quorum_dir}/builder/toolbox'
-mv '${quorum_dir}/builder/toolbox/toolbox' '${quorum_bin_dir}/toolbox'
+'${diablo_builder_dir}/script/build' '${diablo_bin_dir}'     \\
+                                     '${diablo_builder_dir}' \\
+                                     '${diablo_source}'
 EOF
 
 
@@ -122,6 +111,6 @@ mkdir "${output}"
 (
     cd "${output}"
 
-    silk run --source --cwd="${quorum_bin_dir}" "${ip}:${silk_port}" \
-	 tar -cf - '*' | tar -ixpf -
+    silk run --source --cwd="${diablo_bin_dir}" "${ip}:${silk_port}" \
+	 tar -cf - "${assets[@]}" | tar -ixpf -
 )

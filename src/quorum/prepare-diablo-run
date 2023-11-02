@@ -1,0 +1,92 @@
+#!/bin/bash
+#
+#   prepare-diablo-run - create an asset for a Diablo experiment on a specific
+#                        deployment
+#
+#   Syntax: ./prepare-diablo-run <output> <input> <assign>
+#
+#   Copy the diablo asset located in the specified <input> directory to the
+#   <output> directory then a 'setup.yaml' file that is built from the
+#   role assignment found in the given <assign> file.
+#
+
+
+set -e
+
+
+output="$1" ; shift ; test "x${output}" != 'x'
+input="$1"  ; shift ; test "x${input}" != 'x'
+assign="$1" ; shift ; test "x${assign}" != 'x'
+
+if [ -e "${output}" ] ; then
+    rm -rf "${output}"
+fi
+
+source "${assign}"
+
+
+# System specific setup part --------------------------------------------------
+
+# These are the tags that are specified for each machine in the 'setup.yaml'
+# file. These tags can then be used to identify a group of nodes in the
+# 'workload.yaml' file.
+#
+key_tags=('type' 'region')
+
+
+# Check that there is at least 1 server defined in <assign>.
+#
+test "x${server}" != 'x'
+test ${#server[@]} -gt 0
+
+
+source "${0%/*}/environment"
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+# Collect the appropriate key values for each servers.
+#
+index=0
+for machine in "${server[@]}" ; do
+    silk kv "${server}" "${key_tags[@]}" | grep '=' > "${workdir}/${index}" &
+    index=$(( index + 1 ))
+done
+wait
+
+
+cp -R "${input}/diablo" "${workdir}/output"
+
+
+# Generate the 'setup.yaml' file here.
+#
+(
+    cat <<EOF
+interface: "ethereum"
+
+parameters:
+  prepare: nothing
+
+endpoints:
+EOF
+
+    index=0
+    for machine in "${server[@]}" ; do
+	ip="${machine%:*}"
+
+	echo "  - addresses:"
+	echo "      - ${ip}:${quorum_rpcport}"
+	echo "    tags:"
+
+	while read line ; do
+	    echo "${line}" | sed -re 's/^(.*) = (.*)$/      - \1=\2/'
+	done < "${workdir}/${index}"
+
+	index=$(( index + 1 ))
+    done
+) > "${workdir}/output/setup.yaml"
+
+
+mv "${workdir}/output" "${output}"

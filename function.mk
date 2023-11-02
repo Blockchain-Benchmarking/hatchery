@@ -139,6 +139,8 @@ define __AUTODIR-RULE-RECIPE
   $(1): | $(call NOSLASH, $(dir $(1)))
 	$$(call cmd-mkdir, $$@)
 
+  $(1)/: | $(1)
+
   $(if $(filter-out $(__AUTODIR-DONE), $(call NOSLASH, $(dir $(1)))), \
     $(call __AUTODIR-RULE, $(call NOSLASH, $(dir $(1)))))
 endef
@@ -150,6 +152,8 @@ define __AUTODIR-RULE-NORECIPE
   __AUTODIR-DONE += $(1)
 
   $(1): | $(call NOSLASH, $(dir $(1)))
+
+  $(1)/: | $(1)
 
   $(if $(filter-out $(__AUTODIR-DONE), $(call NOSLASH, $(dir $(1)))), \
     $(call __AUTODIR-RULE, $(call NOSLASH, $(dir $(1)))))

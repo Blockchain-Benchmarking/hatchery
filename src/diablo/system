@@ -1,0 +1,248 @@
+#!/bin/bash
+#
+#   system - Setup a group of machines to run a distributed system
+#
+#   Syntax: ./setup <output> <etc-asset> <assign> <asset>
+#
+#   Read the roles written in the given <assign> file and configure the
+#   corresponding nodes to behave accordingly for the system.
+#   If the nodes need some assets to work, they find the specific asset for
+#   the current deployment in <etc-asset> while the top asset directory is
+#   specified by <asset>.
+#
+#   On success, write silk routes corresponding to each role in the <output>
+#   file.
+#
+
+
+set -e
+
+
+output="$1"    ; shift ; test "x${output}" != 'x'
+etc_asset="$1" ; shift ; test "x${etc_asset}" != 'x'
+assign="$1"    ; shift ; test "x${assign}" != 'x'
+asset="$1"     ; shift ; test "x${asset}" != 'x'
+
+source "${assign}"
+
+
+# System specific setup part --------------------------------------------------
+
+# Name of the deployment.
+# This name is reflected on the machines where the system is installed: the
+# configuration asset is copied at "${quorum_etc_dir}/${etc_name}".
+#
+etc_name="${etc_asset##*/}"
+
+# Check that there is exactly 1 primary defined in <assign>.
+#
+test "x${primary}" != 'x'
+test ${#primary[@]} -eq 1
+
+# Check that there is at least 1 secondary defined in <assign>.
+#
+test "x${secondary}" != 'x'
+test ${#secondary[@]} -gt 0
+
+# Check that the config asset <etc-asset> contains the right files.
+#
+test -f "${etc_asset}/setup.yaml"
+
+
+source "${0%/*}/environment"
+
+
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "rm -rf '${workdir}'" EXIT
+
+
+# Build local informations.
+# We build three values:
+# - diablo_route      scalar: silk route to diablo machines
+# - primary_ip        scalar: ip of the diablo primary
+# - secondary_route   scalar: silk route to diablo secondaries
+# - arch              directory: arch of each diablo machine
+#
+diablo_route='('
+diablo_route_sep=''
+
+primary_ip="${primary[0]}"
+primary_ip="${primary_ip%%:*}"
+
+secondary_route='('
+secondary_route_sep=''
+
+mkdir "${workdir}/arch"
+index=0
+
+for machine in "${primary[@]}" "${secondary[@]}" ; do
+    echo "${machine}"
+done | sort | uniq > "${workdir}/machines"
+
+while read machine ; do
+    diablo_route="${diablo_route}${diablo_route_sep}${machine}"
+    diablo_route_sep='|'
+
+    silk run "${machine}" uname -m > "${workdir}/arch/${index}" &
+    index=$(( index + 1 ))
+done < "${workdir}/machines"
+
+for machine in "${secondary[@]}" ; do
+    secondary_route="${secondary_route}${secondary_route_sep}${machine}"
+    secondary_route_sep='|'
+done
+
+diablo_route="${diablo_route})"
+
+secondary_route="${secondary_route})"
+
+wait
+
+
+# Check that for each arch used by some machine, we have the binary assets
+# present in the <asset> directory.
+#
+cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
+    bin_asset="${asset}/bin/${arch}"
+
+    if [ ! -e "${bin_asset}" ] ; then
+	echo "Error: Missing binaries for '${arch}': '${bin_asset}'" >&2
+	exit 1
+    fi
+
+    test -f "${bin_asset}/diablo"
+done
+
+
+# primary script  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+(
+    cat <<EOF
+#!/bin/bash
+
+set -e
+set -x
+
+output_path="\$1"   ; shift ; test "x\${output_path}" != 'x'
+workload_path="\$1" ; shift ; test "x\${workload_path}" != 'x'
+
+if [ "\${output_path:0:1}" != '/' ] ; then
+    output_path="\${PWD}/\${output_path}"
+fi
+
+if [ "\${workload_path:0:1}" != '/' ] ; then
+    workload_path="\${PWD}/\${workload_path}"
+fi
+
+
+export PATH="\${PWD}/${diablo_bin_dir}:\${PATH}"
+
+
+cd "\${0%/*}"
+
+diablo primary -vvv \\
+               --port=${diablo_port} \\
+               --output="\${output_path}" \\
+               --stat \\
+               --compress \\
+EOF
+
+    if [ -f "${etc_asset}/env.conf" ] ; then
+	while read env ; do
+	    echo "               --env=${env} \\"
+	done < "${etc_asset}/env.conf"
+    fi
+
+    cat <<EOF
+               ${#secondary[@]} 'setup.yaml' "\${workload_path}"
+EOF
+) > "${workdir}/primary"
+
+chmod 755 "${workdir}/primary"
+
+
+# secondary script  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+cat <<EOF > "${workdir}/secondary"
+#!/bin/bash
+
+set -e
+set -x
+
+export PATH="\${PWD}/${diablo_bin_dir}:\${PATH}"
+
+diablo secondary -vvv                   \\
+                 --port=${diablo_port}  \\
+                 "\${@/#/--tag=}"       \\
+                 ${primary_ip}
+EOF
+
+chmod 755 "${workdir}/secondary"
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Upload the scripts and the assets to the relevant machines
+#
+silk run --source --local-command "${diablo_route}" <<EOF
+#!/bin/bash
+
+mkdir '${diablo_dir}' 2> '/dev/null'
+mkdir '${diablo_bin_dir}' 2> '/dev/null'
+mkdir '${diablo_etc_dir}' 2> '/dev/null'
+
+set -e
+
+test -d '${diablo_etc_dir}'
+
+if [ -e '${diablo_etc_dir}/${etc_name}' ] ; then
+    rm -rf '${diablo_etc_dir}/${etc_name}'
+fi
+
+mkdir '${diablo_etc_dir}/${etc_name}'
+EOF
+
+
+# Send the appropriate binary assets.
+# For efficiency reasons, create one route per processor architecture and
+# broadcast in a single `silk send` command.
+#
+cat "${workdir}/arch/"* | sort | uniq | while read arch ; do
+    index=0
+    arch_route='('
+    sep=''
+
+    while read machine ; do
+	if [ "x$(cat "${workdir}/arch/${index}")" = "x${arch}" ] ; then
+	    arch_route="${arch_route}${sep}${machine}"
+	    sep='|'
+	fi
+
+	index=$(( index + 1 ))
+    done < "${workdir}/machines"
+
+    arch_route="${arch_route})"
+
+    bin_asset="${asset}/bin/${arch}"
+
+    silk send --target-directory="${diablo_bin_dir}" \
+	 "${arch_route}" "${bin_asset}/"*
+done
+
+# Send the asset files and the primary script to the Diablo primary machine.
+#
+silk send --compress --target-directory="${diablo_etc_dir}/${etc_name}" \
+     "${primary[0]}" "${etc_asset}/"* "${workdir}/primary" &
+
+# Send the secondary script to the Diablo secondary machines.
+#
+silk send --compress --target-directory="${diablo_etc_dir}/${etc_name}" \
+     "${secondary_route}" "${workdir}/secondary" &
+
+wait
+
+
+(
+    echo "primary='${primary[0]}'"
+    echo "secondaries='${secondary_route}'"
+) > "${output}"

@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+#   build-toolbox - build the toolbox program on the local machine
+#
+#   This builds the `toolbox` binary and places it in the '.cache' directory
+#   of this module.
+#   The cache directory of this module is cleaned by this module `mod.mk` when
+#   stopping the Hatchery.
+#
+#   Other scripts of this module automatically include the '.cache' directory
+#   when they source 'environment'.
+#
+
+
+set -e
+
+
+quorum_src="${0%/*}"
+quorum_toolbox_src="${quorum_src}/build.d/toolbox"
+quorum_cache_src="${quorum_src}/.cache"
+
+
+# Build the `toolbox` in a temporary directory instead of directly in the
+# source directory.
+# This is to prevent `go` from downloading external libraries or creating
+# binaries in a directory that can be sent to remote nodes.
+#
+workdir="$(mktemp -d --suffix='.d' "${0##*/}.XXXXXX")"
+trap "chmod -R 700 '${workdir}' ; rm -rf '${workdir}'" EXIT
+
+cp -R "${quorum_toolbox_src}" "${workdir}/toolbox"
+
+make -C "${workdir}/toolbox"
+
+
+cp "${workdir}/toolbox/toolbox" "${quorum_cache_src}/toolbox"

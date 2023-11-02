@@ -2,39 +2,40 @@ package main
 
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"os"
+	"strings"
 )
 
 
-func doCreateNetwork(path string, size int) error {
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func doNew(path string, size int) error {
 	var tmpdir string
-	var net *Network
 	var err error
 
-	tmpdir, err = ioutil.TempDir("", "network")
+	tmpdir, err = ioutil.TempDir("", "asset")
 	if err != nil {
 		return err
 	}
 
 	defer os.RemoveAll(tmpdir)
 
-	net, err = CreateNetwork(tmpdir + "/network", size)
-	if err != nil {
-		return err
-	}
-
-	err = net.IntoAsset(tmpdir + "/asset")
+	_, err = CreateAsset(tmpdir + "/asset", size)
 	if err != nil {
 		return err
 	}
 
 	return os.Rename(tmpdir + "/asset", path)
+	
+	return nil
 }
 
-func mainCreateNetwork(args []string) {
+func mainNew(args []string) {
 	var flags *flag.FlagSet = flag.NewFlagSet("", flag.PanicOnError)
 	var size *int = flags.Int("s", 4, "size of the committee")
 	var err error
@@ -47,7 +48,7 @@ func mainCreateNetwork(args []string) {
 	args = flags.Args()
 
 	if len(args) < 1 {
-		panic("missing destination path operand")
+		panic("missing 'asset' operand")
 	} else if len(args) > 1 {
 		panic(fmt.Sprintf("unexpected operand '%s'", args[1]))
 	}
@@ -56,23 +57,34 @@ func mainCreateNetwork(args []string) {
 		panic(fmt.Sprintf("invalid -s option '%d'", *size))
 	}
 
-	err = doCreateNetwork(args[0], *size)
+	err = doNew(args[0], *size)
 	if err != nil {
 		panic(err)
 	}
 }
 
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-func configNode(path string, addrs []string) error {
-	var node *Node
+func doSetServers(path string) error {
+	var scanner *bufio.Scanner
+	var addrs []string
+	var asset *Asset
+	var addr string
 	var err error
 
-	node, err = NewNode(path)
+	asset, err = LoadAsset(path)
 	if err != nil {
 		return err
 	}
 
-	err = node.Configure(addrs)
+	scanner = bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		addr = scanner.Text()
+		addrs = append(addrs, addr)
+	}
+
+	err = asset.SetServers(addrs)
 	if err != nil {
 		return err
 	}
@@ -80,42 +92,166 @@ func configNode(path string, addrs []string) error {
 	return nil
 }
 
-func mainConfigNode(args []string) {
+func mainSetServers(args []string) {
 	var err error
 
 	if len(args) < 1 {
-		panic("missing path operand")
+		panic("missing 'asset' operand")
+	} else if len(args) > 1 {
+		panic(fmt.Sprintf("unexpected operand '%s'", args[1]))
 	}
 
-	err = configNode(args[0], args[1:])
+	err = doSetServers(args[0])
 	if err != nil {
 		panic(err)
 	}
 }
 
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func doAddAccounts(path string, accounts int, balance *big.Int) error {
+	var asset *Asset
+	var err error
+
+	asset, err = LoadAsset(path)
+	if err != nil {
+		return err
+	}
+
+	err = asset.AddAccounts(accounts, balance)
+	if err != nil {
+		return err
+	}
+	
+	return nil
+}
+
+func mainAddAccounts(args []string) {
+	var flags *flag.FlagSet = flag.NewFlagSet("", flag.PanicOnError)
+	var accounts *int = flags.Int("a", 1, "number of accounts")
+	var strbalance *string = flags.String("b",
+		"0x446c3b15f9926687d2c40534fdb564000000000000",
+		"balance of accounts")
+	var balance *big.Int
+	var valid bool
+	var err error
+
+	err = flags.Parse(args)
+	if err != nil {
+		panic(err)
+	}
+
+	args = flags.Args()
+
+	if len(args) < 1 {
+		panic("missing 'asset' operand")
+	} else if len(args) > 1 {
+		panic(fmt.Sprintf("unexpected operand '%s'", args[1]))
+	}
+
+	if *accounts < 0 {
+		panic(fmt.Sprintf("invalid -a option '%d'", *accounts))
+	}
+
+	if strings.HasPrefix(*strbalance, "0x") {
+		*strbalance = strings.TrimPrefix(*strbalance, "0x")
+		balance = big.NewInt(0)
+		_, valid = balance.SetString(*strbalance, 16)
+		if valid == false {
+			panic(fmt.Sprintf("invalid -b option '0x%s'",
+				*strbalance))
+		}
+	} else {
+		balance = big.NewInt(0)
+		_, valid = balance.SetString(*strbalance, 10)
+		if valid == false {
+			panic(fmt.Sprintf("invalid -b option '%s'",
+				*strbalance))
+		}
+	}
+
+	err = doAddAccounts(args[0], *accounts, balance)
+	if err != nil {
+		panic(err)
+	}
+}
+
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+func doGetAccounts(path string) error {
+	var accounts []Account
+	var account Account
+	var asset *Asset
+	var err error
+
+	asset, err = LoadAsset(path)
+	if err != nil {
+		return err
+	}
+
+	accounts, err = asset.GetAccounts()
+	if err != nil {
+		return err
+	}
+
+	for _, account = range accounts {
+		fmt.Printf("- address: %s\n  private: %s\n",
+			account.PublicKey(), account.PrivateKey())
+	}
+
+	return nil
+}
+
+func mainGetAccounts(args []string) {
+	var err error
+
+	if len(args) < 1 {
+		panic("missing 'asset' operand")
+	} else if len(args) > 1 {
+		panic(fmt.Sprintf("unexpected operand '%s'", args[1]))
+	}
+
+	err = doGetAccounts(args[0])
+	if err != nil {
+		panic(err)
+	}
+}
+
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 func main() {
 	if len(os.Args) < 2 {
 		panic(`missing command operand
 
-Syntax: toolbox create-network [-s <size>] <path>    (1)
-        toolbox config-node <path> <addrs...>        (2)
+Syntax: toolbox new [-s <server>] <asset>                                   (1)
+        toolbox set-servers <asset>                                         (2)
+        toolbox add-accounts [-a <account>] [-b <balance>] <asset>          (3)
+        toolbox get-accounts <asset>                                        (4)
 
-(1) Create a network asset in the given <path> directory.
-    By default, create a network of size 4.
-    This behavior can be changed with option '-s'.
-
-(2) Configure the network node asset in the given <path> directory to be part
-    of a network composed of nodes with the given <addrs...>.
 `)
 	}
 
 	switch (os.Args[1]) {
-	case "create-network":
-		mainCreateNetwork(os.Args[2:])
-	case "config-node":
-		mainConfigNode(os.Args[2:])
+	case "new":
+		mainNew(os.Args[2:])
+	case "set-servers":
+		mainSetServers(os.Args[2:])
+	case "add-accounts":
+		mainAddAccounts(os.Args[2:])
+	case "get-accounts":
+		mainGetAccounts(os.Args[2:])
 	default:
 		panic(fmt.Sprintf("unknown command '%s'", os.Args[1]))
 	}
 }
+
+
+
+// Network asset structure
+//
+//     /
+//     |- servers/
+//     |- clients/
+//     |- 0/
+//     |- ...
+//     `- 3/
