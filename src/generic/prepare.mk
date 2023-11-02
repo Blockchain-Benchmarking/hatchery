@@ -40,12 +40,12 @@ endif
 # - path of the shell config of the machine to use to prepare the asset
 # - path of the binary asset to install on the machine
 
-$(ASSET)$(system)/etc/%: $(module-path)prepare \
-                         $(prepare-machine) \
-                         $(prepare-binary) \
-                       | $(ASSET)$(system)/etc
+$(ASSET)$(system)/etc/base.%: $(module-path)prepare \
+                              $(prepare-machine) \
+                              $(prepare-binary) \
+                            | $(ASSET)$(system)/etc
 	$(call cmd-print,  PREPARE $@)
 	$(call cmd-run, $< $@ $(filter-out $<, $^))
 
 
-.NOTINTERMEDIATE: $(ASSET)$(system)/etc/%
+.NOTINTERMEDIATE: $(ASSET)$(system)/etc/base.%

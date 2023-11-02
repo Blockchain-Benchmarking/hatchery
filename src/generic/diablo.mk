@@ -13,7 +13,7 @@ $(RUN)diablo/etc/$(system).%: $(module-path)prepare-diablo-run \
 $(call GENERATE-DIR, $(ASSET)$(system)/etc)
 
 $(ASSET)$(system)/etc/diablo.%: $(module-path)prepare-diablo-asset \
-                                $(ASSET)$(system)/etc/% \
+                                $(ASSET)$(system)/etc/base.% \
                               | $(ASSET)$(system)/etc
 	$(call cmd-print,  PREPARE $@)
 	$(call cmd-run, $< $@ $(filter-out $<, $^))
