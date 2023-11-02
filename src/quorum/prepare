@@ -36,9 +36,9 @@ fi
 # The only asset we can build for Quorum is a "network" (e.g. static-nodes,
 # genesis files and nodekeys).
 #
-# Deduce the size of the network to build from the name: <name> = <size>.
+# Deduce the size of the network to build from the name: 'base.' <size>.
 #
-size="${output##*/}"
+size="${output##*/base.}"
 
 echo "${size}" | grep -Pq '^\d+$'
 test ${size} -gt 0
